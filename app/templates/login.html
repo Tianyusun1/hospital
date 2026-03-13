@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>医疗设备借还管理系统 - 登录</title>
+    <style>
+        /* 定义全局色彩变量：治愈系医疗绿与极简灰白 */
+        :root {
+            --primary-color: #059669;       /* 核心医疗绿，代表生机与希望 */
+            --primary-hover: #047857;
+            --bg-color: #f0fdf4;            /* 非常浅的薄荷绿背景，缓解视觉疲劳 */
+            --text-main: #334155;           /* 柔和的深灰色字体，比纯黑更护眼 */
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+        }
+
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-color);
+            /* 增加非常微弱的背景渐变，提升空间感 */
+            background-image: radial-gradient(circle at top right, #dcfce7 0%, transparent 40%),
+                              radial-gradient(circle at bottom left, #dcfce7 0%, transparent 40%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            color: var(--text-main);
+        }
+
+        .login-wrapper {
+            background-color: #ffffff;
+            padding: 48px 40px;
+            border-radius: 20px; /* 圆润的边角，体现亲和力 */
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+            width: 100%;
+            max-width: 380px;
+            transition: transform 0.3s ease;
+        }
+
+        .login-wrapper:hover {
+            transform: translateY(-2px); /* 鼠标悬浮时微微浮起 */
+        }
+
+        .logo-area {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        /* 用纯CSS画一个简约的医疗十字/图标背景 */
+        .logo-icon {
+            font-size: 32px;
+            color: var(--primary-color);
+            margin-bottom: 16px;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            background: #ecfdf5;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+        }
+
+        h2 {
+            text-align: center;
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0 0 8px 0;
+            letter-spacing: 1px;
+        }
+
+        p.subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 14px;
+            margin: 0 0 32px 0;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-main);
+        }
+
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            box-sizing: border-box;
+            font-size: 15px;
+            transition: all 0.3s ease;
+            background-color: #f8fafc; /* 输入框默认微灰，点击后变白 */
+        }
+
+        input:focus {
+            border-color: var(--primary-color);
+            background-color: #ffffff;
+            outline: none;
+            /* 柔和的发光聚焦效果 */
+            box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
+        }
+
+        .error-msg {
+            color: #ef4444;
+            background-color: #fef2f2;
+            border: 1px solid #fecaca;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 20px;
+            display: none;
+            text-align: center;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.2s, transform 0.1s;
+            letter-spacing: 2px;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        button:active {
+            transform: scale(0.98); /* 点击时的微缩反馈 */
+        }
+
+        button:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+<div class="login-wrapper">
+    <div class="logo-area">
+        <div class="logo-icon">✚</div>
+        <h2>设备借还系统</h2>
+        <p class="subtitle">规范 · 安全 · 高效的资产管理</p>
+    </div>
+
+    <form id="loginForm">
+        <div class="form-group">
+            <label for="username">职工工号 / 账号</label>
+            <input type="text" id="username" name="username" placeholder="请输入您的账号" required autocomplete="off">
+        </div>
+        <div class="form-group">
+            <label for="password">安全密码</label>
+            <input type="password" id="password" name="password" placeholder="请输入密码" required>
+        </div>
+
+        <div id="errorMsg" class="error-msg"></div>
+
+        <button type="submit" id="loginBtn">安全登录</button>
+    </form>
+    <div style="text-align: center; margin-top: 15px; font-size: 13px;">
+            <a href="/register" style="color: #059669; text-decoration: none;">新职工入网登记 (需审核)</a>
+    </div>
+</div>
+
+<script>
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const usernameInput = document.getElementById('username').value;
+        const passwordInput = document.getElementById('password').value;
+        const errorMsgDiv = document.getElementById('errorMsg');
+        const loginBtn = document.getElementById('loginBtn');
+
+        errorMsgDiv.style.display = 'none';
+        errorMsgDiv.innerText = '';
+        loginBtn.disabled = true;
+        loginBtn.innerText = '身份核验中...';
+
+        fetch('/api/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                username: usernameInput,
+                password: passwordInput
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.code === 200) {
+                loginBtn.innerText = '登录成功';
+                loginBtn.style.backgroundColor = '#10b981'; // 成功时变为更明亮的绿色
+                setTimeout(() => {
+                    window.location.href = '/dashboard';
+                }, 300); // 稍微延迟一下，让用户看到成功状态
+            } else {
+                errorMsgDiv.innerText = data.msg;
+                errorMsgDiv.style.display = 'block';
+                loginBtn.disabled = false;
+                loginBtn.innerText = '安全登录';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            errorMsgDiv.innerText = '系统连接异常，请联系信息科';
+            errorMsgDiv.style.display = 'block';
+            loginBtn.disabled = false;
+            loginBtn.innerText = '安全登录';
+        });
+    });
+</script>
+
+</body>
+</html>

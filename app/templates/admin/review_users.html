@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户入网审核 - 设备借还管理系统</title>
+    <style>
+        :root {
+            --primary-color: #059669;
+            --primary-hover: #047857;
+            --danger-color: #ef4444;
+            --danger-hover: #dc2626;
+            --bg-color: #f0fdf4;
+            --text-main: #334155;
+            --border-color: #e2e8f0;
+        }
+        body {
+            font-family: 'PingFang SC', sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 40px 20px;
+            color: var(--text-main);
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            border-bottom: 2px solid var(--bg-color);
+            padding-bottom: 15px;
+        }
+        .header h2 { margin: 0; color: var(--primary-color); }
+        .nav-links a {
+            color: var(--text-main);
+            text-decoration: none;
+            margin-left: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .nav-links a:hover { color: var(--primary-color); }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            background-color: #f8fafc;
+            color: #64748b;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        tr:hover { background-color: #f8fafc; }
+
+        /* 状态空提示 */
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #94a3b8;
+            font-size: 15px;
+            display: none; /* 默认隐藏 */
+        }
+
+        /* 按钮样式 */
+        .btn-group { display: flex; gap: 8px; }
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            color: white;
+            transition: opacity 0.2s;
+        }
+        .btn:hover { opacity: 0.8; }
+        .btn-approve { background-color: var(--primary-color); }
+        .btn-reject { background-color: var(--danger-color); }
+
+        /* 顶部消息提示框 */
+        #toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            display: none;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<div class="container">
+    <div class="header">
+        <h2>待审核入网申请</h2>
+        <div class="nav-links">
+            <a href="/dashboard">返回工作台</a>
+            <a href="#" onclick="logout()">安全退出</a>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>工号</th>
+                <th>真实姓名</th>
+                <th>科室</th>
+                <th>联系电话</th>
+                <th>申请时间</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="userTableBody">
+            </tbody>
+    </table>
+
+    <div id="emptyState" class="empty-state">
+        目前没有需要审核的入网申请 🎉
+    </div>
+</div>
+
+<script>
+    // 页面加载完毕后，立即去后端拉取数据
+    document.addEventListener('DOMContentLoaded', fetchPendingUsers);
+
+    // 获取待审核用户列表
+    function fetchPendingUsers() {
+        // 注意：因为我们在蓝图加了 url_prefix='/admin'，所以接口路径是 /admin/api/...
+        fetch('/admin/api/users/pending')
+            .then(res => res.json())
+            .then(data => {
+                if (data.code === 200) {
+                    renderTable(data.data);
+                } else if (data.code === 401 || data.code === 403) {
+                    // 如果没登录或者不是管理员，踢回登录页
+                    alert(data.msg);
+                    window.location.href = '/login';
+                }
+            })
+            .catch(err => showToast('获取数据失败，请检查网络', '#ef4444'));
+    }
+
+    // 将数据渲染到 HTML 表格中
+    function renderTable(users) {
+        const tbody = document.getElementById('userTableBody');
+        const emptyState = document.getElementById('emptyState');
+        tbody.innerHTML = ''; // 清空旧数据
+
+        if (users.length === 0) {
+            emptyState.style.display = 'block';
+            return;
+        }
+
+        emptyState.style.display = 'none';
+
+        users.forEach(user => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${user.username}</td>
+                <td><strong>${user.real_name}</strong></td>
+                <td>${user.department}</td>
+                <td>${user.phone}</td>
+                <td>${user.created_at}</td>
+                <td>
+                    <div class="btn-group">
+                        <button class="btn btn-approve" onclick="reviewUser(${user.id}, 'approve')">通过</button>
+                        <button class="btn btn-reject" onclick="reviewUser(${user.id}, 'reject')">拒绝</button>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // 处理审核操作 (通过/拒绝)
+    function reviewUser(userId, action) {
+        if (action === 'reject' && !confirm('确定要拒绝该用户的入网申请吗？')) {
+            return;
+        }
+
+        fetch('/admin/api/users/do_review', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, action: action })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.code === 200) {
+                showToast(data.msg, '#059669');
+                fetchPendingUsers(); // 重新拉取最新列表，刷新表格
+            } else {
+                showToast(data.msg, '#ef4444');
+            }
+        })
+        .catch(err => showToast('操作失败，请重试', '#ef4444'));
+    }
+
+    // 退出登录逻辑
+    function logout() {
+        fetch('/api/logout', { method: 'POST' })
+            .then(() => window.location.href = '/login');
+    }
+
+    // 显示顶部提示框
+    function showToast(msg, color) {
+        const toast = document.getElementById('toast');
+        toast.innerText = msg;
+        toast.style.backgroundColor = color;
+        toast.style.display = 'block';
+        setTimeout(() => { toast.style.display = 'none'; }, 3000);
+    }
+</script>
+
+</body>
+</html>

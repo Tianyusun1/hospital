@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>医疗设备借还管理系统 - 职工注册</title>
+    <style>
+        :root {
+            --primary-color: #059669;
+            --primary-hover: #047857;
+            --bg-color: #f0fdf4;
+            --text-main: #334155;
+            --border-color: #e2e8f0;
+        }
+        body {
+            font-family: 'PingFang SC', sans-serif;
+            background-color: var(--bg-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            color: var(--text-main);
+        }
+        .register-wrapper {
+            background-color: #ffffff;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+            width: 100%;
+            max-width: 450px;
+        }
+        h2 { text-align: center; color: var(--primary-color); margin-bottom: 24px; }
+        .form-row {
+            display: flex;
+            gap: 15px;
+        }
+        .form-group { flex: 1; margin-bottom: 18px; }
+        label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 500; }
+        input, select {
+            width: 100%; padding: 12px; border: 1px solid var(--border-color);
+            border-radius: 8px; box-sizing: border-box; font-size: 14px;
+            background-color: #f8fafc; transition: all 0.3s ease;
+        }
+        input:focus, select:focus {
+            border-color: var(--primary-color); background-color: #fff; outline: none;
+            box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
+        }
+        .message-box {
+            padding: 10px; border-radius: 8px; font-size: 13px; margin-bottom: 20px; display: none; text-align: center;
+        }
+        .error { color: #ef4444; background-color: #fef2f2; border: 1px solid #fecaca; }
+        .success { color: #059669; background-color: #ecfdf5; border: 1px solid #a7f3d0; }
+        button {
+            width: 100%; padding: 14px; background-color: var(--primary-color); color: white;
+            border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;
+        }
+        button:hover { background-color: var(--primary-hover); }
+        .link-text { text-align: center; margin-top: 15px; font-size: 13px; }
+        .link-text a { color: var(--primary-color); text-decoration: none; }
+        .link-text a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<div class="register-wrapper">
+    <h2>职工入网登记</h2>
+    <form id="registerForm">
+        <div class="form-row">
+            <div class="form-group">
+                <label>职工工号 *</label>
+                <input type="text" id="username" required placeholder="如: 2023001">
+            </div>
+            <div class="form-group">
+                <label>真实姓名 *</label>
+                <input type="text" id="real_name" required placeholder="您的姓名">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>所属科室 *</label>
+            <select id="department" required>
+                <option value="">请选择科室</option>
+                <option value="急诊科">急诊科</option>
+                <option value="重症医学科(ICU)">重症医学科(ICU)</option>
+                <option value="内科">内科</option>
+                <option value="外科">外科</option>
+                <option value="麻醉科">麻醉科</option>
+                <option value="医学工程科">医学工程科</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>联系电话 (选填)</label>
+            <input type="text" id="phone" placeholder="用于设备逾期提醒">
+        </div>
+
+        <div class="form-group">
+            <label>设置密码 *</label>
+            <input type="password" id="password" required placeholder="至少6位密码">
+        </div>
+
+        <div id="msgBox" class="message-box"></div>
+
+        <button type="submit" id="regBtn">提交审核申请</button>
+
+        <div class="link-text">
+            已有账号？ <a href="/login">返回安全登录</a>
+        </div>
+    </form>
+</div>
+
+<script>
+    document.getElementById('registerForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const data = {
+            username: document.getElementById('username').value,
+            real_name: document.getElementById('real_name').value,
+            department: document.getElementById('department').value,
+            phone: document.getElementById('phone').value,
+            password: document.getElementById('password').value
+        };
+
+        if (data.password.length < 6) {
+            showMsg('密码长度不能少于6位', 'error');
+            return;
+        }
+
+        const btn = document.getElementById('regBtn');
+        btn.disabled = true;
+        btn.innerText = '提交中...';
+
+        fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(res => res.json())
+        .then(resData => {
+            if (resData.code === 200) {
+                showMsg(resData.msg + '，3秒后返回登录页', 'success');
+                setTimeout(() => { window.location.href = '/login'; }, 3000);
+            } else {
+                showMsg(resData.msg, 'error');
+                btn.disabled = false;
+                btn.innerText = '提交审核申请';
+            }
+        })
+        .catch(err => {
+            showMsg('网络错误，请稍后再试', 'error');
+            btn.disabled = false;
+            btn.innerText = '提交审核申请';
+        });
+    });
+
+    function showMsg(text, type) {
+        const box = document.getElementById('msgBox');
+        box.innerText = text;
+        box.className = 'message-box ' + type;
+        box.style.display = 'block';
+    }
+</script>
+</body>
+</html>

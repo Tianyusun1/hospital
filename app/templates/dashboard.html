@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>医疗设备借还管理系统 - 工作台</title>
+    <style>
+        :root {
+            --primary-color: #059669;
+            --primary-light: #d1fae5;
+            --sidebar-bg: #1e293b;
+            --sidebar-hover: #334155;
+            --bg-color: #f1f5f9;
+            --text-main: #334155;
+        }
+        body {
+            font-family: 'PingFang SC', sans-serif;
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+        }
+        /* 左侧侧边栏 */
+        .sidebar {
+            width: 250px;
+            background-color: var(--sidebar-bg);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+        .logo {
+            padding: 20px;
+            text-align: center;
+            font-size: 20px;
+            font-weight: bold;
+            background-color: #0f172a;
+            letter-spacing: 1px;
+            border-bottom: 1px solid #334155;
+        }
+        .logo span { color: var(--primary-color); }
+
+        .menu {
+            flex: 1;
+            padding: 20px 0;
+            overflow-y: auto;
+        }
+        .menu a {
+            display: block;
+            padding: 15px 25px;
+            color: #cbd5e1;
+            text-decoration: none;
+            font-size: 15px;
+            transition: all 0.3s;
+            border-left: 4px solid transparent;
+        }
+        .menu a:hover, .menu a.active {
+            background-color: var(--sidebar-hover);
+            color: white;
+            border-left-color: var(--primary-color);
+        }
+        .menu-title {
+            padding: 10px 25px;
+            font-size: 12px;
+            color: #64748b;
+            text-transform: uppercase;
+            margin-top: 15px;
+        }
+
+        /* 右侧主体区域 */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        /* 顶部导航条 */
+        .topbar {
+            height: 60px;
+            background-color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 30px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .role-badge {
+            background-color: var(--primary-light);
+            color: var(--primary-color);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .logout-btn {
+            background-color: transparent;
+            border: 1px solid #e2e8f0;
+            padding: 6px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #64748b;
+            transition: all 0.2s;
+        }
+        .logout-btn:hover {
+            background-color: #f8fafc;
+            color: #ef4444;
+            border-color: #ef4444;
+        }
+
+        /* 工作区内容 */
+        .workspace {
+            padding: 30px;
+            flex: 1;
+            overflow-y: auto;
+        }
+        .welcome-card {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+        .welcome-card h1 { color: var(--primary-color); margin-top: 0; }
+        .welcome-card p { color: #64748b; font-size: 16px; line-height: 1.6; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="logo">✚ 医疗设备<span>管理系统</span></div>
+        <div class="menu">
+            <a href="/dashboard" class="active">🏠 工作台首页</a>
+
+            <div class="menu-title">业务操作</div>
+            <a href="#">📦 设备列表 (待开发)</a>
+            <a href="#">🔄 设备借还 (待开发)</a>
+
+            {% if role_id == 1 %}
+            <div class="menu-title">系统管理 (管理员专属)</div>
+            <a href="/admin/users/review">👥 入网审核</a>
+            <a href="#">📝 审计日志 (待开发)</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="topbar">
+            <div>
+                <strong>当前位置：</strong>工作台首页
+            </div>
+            <div class="user-info">
+                <span>你好，<strong>{{ real_name }}</strong></span>
+                {% if role_id == 1 %}
+                    <span class="role-badge">超级管理员</span>
+                {% else %}
+                    <span class="role-badge" style="background-color: #e0f2fe; color: #0284c7;">医护人员</span>
+                {% endif %}
+                <button class="logout-btn" onclick="logout()">安全退出</button>
+            </div>
+        </div>
+
+        <div class="workspace">
+            <div class="welcome-card">
+                <h1>欢迎使用医疗设备借还管理系统</h1>
+                <p>
+                    系统遵循严格的 <strong>RBAC 权限标准</strong> 进行访问控制。<br>
+                    您可以在左侧菜单中选择需要办理的业务。所有的操作记录均会被系统审计与保护。
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function logout() {
+            fetch('/api/logout', { method: 'POST' })
+                .then(() => window.location.href = '/login');
+        }
+    </script>
+</body>
+</html>
