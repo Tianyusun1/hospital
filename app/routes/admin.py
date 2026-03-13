@@ -1,30 +1,30 @@
 # 文件位置：app/routes/admin.py
-from flask import Blueprint, request, jsonify, render_template
+from flask import Blueprint, request, jsonify, render_template, session
 from app.extensions import db
-from app.models.user import User, Role  # 导入角色模型
+from app.models.user import User, Role
 from app.models.equipment import BorrowRecord
-from app.models.log import SysLog  # 【核心新增】：导入系统操作日志模型
+from app.models.log import SysLog
 from app.utils.decorators import admin_required
-from werkzeug.security import generate_password_hash  # 用于重置密码
-from datetime import datetime
+from werkzeug.security import generate_password_hash
+# --- 【修复】：同时导入 datetime 类和 timedelta 类 ---
+from datetime import datetime, timedelta
+# --- 【核心新增】：导入安全校验工具 ---
+from app.utils.security import check_operation_risk
 
-# 创建名为 admin 的蓝图，并为其下所有路由统一添加 /admin 前缀
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
 
-# ================= 1. 用户审核与管理 (Module 3) =================
+# ================= 1. 用户审核与管理 =================
 
 @admin_bp.route('/users/review', methods=['GET'])
 @admin_required
 def review_page():
-    """展示待审核用户页面"""
     return render_template('admin/review_users.html')
 
 
 @admin_bp.route('/api/users/pending', methods=['GET'])
 @admin_required
 def get_pending_users():
-    """获取所有“待审核”状态的用户列表"""
     users = User.query.filter_by(status='pending').order_by(User.created_at.desc()).all()
     user_list = []
     for u in users:
@@ -42,7 +42,6 @@ def get_pending_users():
 @admin_bp.route('/api/users/do_review', methods=['POST'])
 @admin_required
 def do_review():
-    """处理用户审核 (通过/拒绝)，并记录审计日志"""
     data = request.get_json()
     user_id = data.get('user_id')
     action = data.get('action')
@@ -64,24 +63,25 @@ def do_review():
         user.status = 'rejected'
         msg = f'已拒绝 {user.real_name} 的入网申请'
 
-    # 【核心新增】：记录审核审计日志
+    # --- 行为安全检测 (管理员凌晨审核用户也属于异常) ---
+    r_level, r_msg = check_operation_risk()
+
     review_log = SysLog(
-        user_id=request.environ.get('user_id'),  # 假设 session 或环境中有当前操作人
+        user_id=session.get('user_id'),
         action='用户审核',
         target=f"用户: {user.real_name}, 动作: {action}",
-        ip_address=request.remote_addr
+        ip_address=request.remote_addr,
+        risk_level=r_level,
+        risk_msg=r_msg
     )
     db.session.add(review_log)
-
     db.session.commit()
     return jsonify({'code': 200, 'msg': msg})
 
 
-# --- 新增：获取所有正常状态的用户 (图表：查询/展示用户列表) ---
 @admin_bp.route('/api/users/all', methods=['GET'])
 @admin_required
 def get_all_users():
-    """获取系统中所有非待审核的用户"""
     users = User.query.filter(User.status != 'pending').all()
     data = [{
         'id': u.id,
@@ -94,52 +94,47 @@ def get_all_users():
     return jsonify({'code': 200, 'data': data})
 
 
-# --- 新增：修改用户信息 (图表：简易修改用户-密码/角色) ---
 @admin_bp.route('/api/users/update', methods=['POST'])
 @admin_required
 def update_user_info():
-    """管理员强制修改用户信息或重置密码"""
     data = request.get_json()
     user = User.query.get(data.get('user_id'))
     if not user: return jsonify({'code': 404, 'msg': '用户不存在'})
 
-    # 修改角色
     if 'role_id' in data:
         user.role_id = data['role_id']
-
-    # 强制重置密码
     if 'new_password' in data:
         user.password_hash = generate_password_hash(data['new_password'])
-
-    # 修改账号状态 (如禁用账号)
     if 'status' in data:
         user.status = data['status']
 
-    # 记录审计日志
+    # --- 行为安全检测 ---
+    r_level, r_msg = check_operation_risk()
+
     update_log = SysLog(
+        user_id=session.get('user_id'),
         action='修改用户信息',
         target=f"目标用户: {user.username}",
-        ip_address=request.remote_addr
+        ip_address=request.remote_addr,
+        risk_level=r_level,
+        risk_msg=r_msg
     )
     db.session.add(update_log)
-
     db.session.commit()
     return jsonify({'code': 200, 'msg': '用户信息更新成功'})
 
 
-# ================= 2. 借还审计与系统日志 (Module 6) =================
+# ================= 2. 借还审计与系统日志 =================
 
 @admin_bp.route('/audit', methods=['GET'])
 @admin_required
 def audit_page():
-    """展示借还审计日志与系统日志界面"""
     return render_template('admin/audit.html')
 
 
 @admin_bp.route('/api/audit/list', methods=['GET'])
 @admin_required
 def get_borrow_logs():
-    """获取设备借还流转记录 (借还业务专题)"""
     records = BorrowRecord.query.order_by(BorrowRecord.borrow_time.desc()).all()
     log_list = []
     for r in records:
@@ -156,25 +151,26 @@ def get_borrow_logs():
     return jsonify({'code': 200, 'data': log_list})
 
 
-# --- 新增：系统操作日志查询 (图表：日志列表查询-按操作人/时间筛选) ---
+# --- 【重点升级】：支持风险筛选的系统日志接口 ---
 @admin_bp.route('/api/sys_logs/list', methods=['GET'])
 @admin_required
 def get_sys_logs():
-    """获取全局系统操作审计日志，支持参数筛选"""
-    # 接收筛选参数
     operator_id = request.args.get('user_id')
-    start_date = request.args.get('start_date')  # 格式: 2023-01-01
+    start_date = request.args.get('start_date')
+    risk_level = request.args.get('risk_level')
 
     query = SysLog.query
 
-    # 按操作人筛选
     if operator_id:
         query = query.filter_by(user_id=operator_id)
-
-    # 按时间筛选
+    if risk_level and risk_level.isdigit():
+        query = query.filter_by(risk_level=int(risk_level))
     if start_date:
-        dt = datetime.strptime(start_date, '%Y-%m-%d')
-        query = query.filter(SysLog.created_at >= dt)
+        try:
+            dt = datetime.strptime(start_date, '%Y-%m-%d')
+            query = query.filter(SysLog.created_at >= dt)
+        except ValueError:
+            pass
 
     logs = query.order_by(SysLog.created_at.desc()).all()
 
@@ -184,7 +180,27 @@ def get_sys_logs():
         'action': l.action,
         'target': l.target,
         'ip': l.ip_address,
+        'risk_level': l.risk_level,
+        'risk_msg': l.risk_msg,
         'time': l.created_at.strftime('%Y-%m-%d %H:%M:%S')
     } for l in logs]
 
     return jsonify({'code': 200, 'data': data})
+
+
+# --- 【新增/修复】：告警摘要 API ---
+@admin_bp.route('/api/sys_logs/alerts', methods=['GET'])
+@admin_required
+def get_log_alerts():
+    """获取最近 24 小时内的高风险操作数量"""
+    # 【修复】：简化了时间计算逻辑，并直接使用已导入的 timedelta
+    one_day_ago = datetime.utcnow() - timedelta(days=1)
+
+    warning_count = SysLog.query.filter(SysLog.risk_level > 0, SysLog.created_at >= one_day_ago).count()
+    danger_count = SysLog.query.filter(SysLog.risk_level == 2, SysLog.created_at >= one_day_ago).count()
+
+    return jsonify({
+        'code': 200,
+        'warning_total': warning_count,
+        'danger_total': danger_count
+    })

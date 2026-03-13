@@ -9,6 +9,10 @@
             --bg-color: #f1f5f9;
             --text-main: #334155;
             --border-color: #e2e8f0;
+            --warning-bg: #fff7ed;   /* 风险等级1：橙色背景 */
+            --warning-text: #9a3412;
+            --danger-bg: #fef2f2;    /* 风险等级2：红色背景 */
+            --danger-text: #991b1b;
         }
         body { font-family: 'PingFang SC', sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
@@ -20,7 +24,7 @@
         .filter-bar { background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 15px; align-items: flex-end; border: 1px solid var(--border-color); }
         .filter-group { display: flex; flex-direction: column; gap: 5px; }
         .filter-group label { font-size: 12px; font-weight: bold; color: #64748b; }
-        .filter-bar input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+        .filter-bar input, .filter-bar select { padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
         .btn-query { background: var(--primary-color); color: white; border: none; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; }
 
         /* 标签页切换 */
@@ -33,12 +37,20 @@
         table { width: 100%; border-collapse: collapse; background: white; }
         th, td { padding: 14px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 13px; }
         th { background-color: #f8fafc; color: #64748b; }
-        tr:hover { background-color: #fcfdfd; }
+
+        /* 风险行样式 */
+        .row-warning { background-color: var(--warning-bg) !important; color: var(--warning-text); }
+        .row-danger { background-color: var(--danger-bg) !important; color: var(--danger-text); font-weight: bold; }
+
+        .risk-badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-left: 5px; }
+        .badge-1 { background: #fb923c; color: white; }
+        .badge-2 { background: #ef4444; color: white; }
 
         .status-badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
         .status-borrowing { background: #fee2e2; color: #991b1b; }
         .status-returned { background: #dcfce7; color: #166534; }
         .action-log { color: #0369a1; font-weight: bold; }
+        small.risk-desc { display: block; color: #ef4444; margin-top: 4px; font-style: italic; }
     </style>
 </head>
 <body>
@@ -58,6 +70,15 @@
             <label>起始日期</label>
             <input type="date" id="filter_date">
         </div>
+        <div class="filter-group" id="risk_filter_group" style="display:none;">
+            <label>风险等级</label>
+            <select id="filter_risk_level">
+                <option value="">全部记录</option>
+                <option value="0">正常记录</option>
+                <option value="1">中风险 (警告)</option>
+                <option value="2">高风险 (危险)</option>
+            </select>
+        </div>
         <button class="btn-query" onclick="loadData()">🔍 立即查询</button>
     </div>
 
@@ -68,10 +89,8 @@
 
     <div class="table-container">
         <table id="mainTable">
-            <thead id="tableHead">
-                </thead>
-            <tbody id="tableBody">
-                </tbody>
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody"></tbody>
         </table>
     </div>
 </div>
@@ -85,21 +104,25 @@
         currentTab = tab;
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.getElementById(`tab_${tab}`).classList.add('active');
+
+        // 只有系统日志页签显示风险筛选
+        document.getElementById('risk_filter_group').style.display = (tab === 'sys' ? 'flex' : 'none');
+
         loadData();
     }
 
     function loadData() {
         const userId = document.getElementById('filter_user_id').value;
         const date = document.getElementById('filter_date').value;
+        const riskLevel = document.getElementById('filter_risk_level').value;
 
         if (currentTab === 'borrow') {
             fetchBorrowLogs();
         } else {
-            fetchSysLogs(userId, date);
+            fetchSysLogs(userId, date, riskLevel);
         }
     }
 
-    // 1. 获取设备借还专题日志
     function fetchBorrowLogs() {
         fetch('/admin/api/audit/list')
             .then(res => res.json())
@@ -108,9 +131,9 @@
             });
     }
 
-    // 2. 获取全局系统操作审计日志 (支持筛选)
-    function fetchSysLogs(userId, date) {
-        let url = `/admin/api/sys_logs/list?user_id=${userId}&start_date=${date}`;
+    function fetchSysLogs(userId, date, riskLevel) {
+        // 【新增】：带上 risk_level 参数
+        let url = `/admin/api/sys_logs/list?user_id=${userId}&start_date=${date}&risk_level=${riskLevel}`;
         fetch(url)
             .then(res => res.json())
             .then(res => {
@@ -162,20 +185,38 @@
                 <th>操作人</th>
                 <th>动作</th>
                 <th>操作对象/备注</th>
+                <th>风险判定</th>
                 <th>IP地址</th>
             </tr>
         `;
 
-        body.innerHTML = data.map(log => `
-            <tr>
-                <td>#${log.id}</td>
-                <td>${log.time}</td>
-                <td>${log.operator}</td>
-                <td><span class="action-log">${log.action}</span></td>
-                <td>${log.target || '--'}</td>
-                <td><code>${log.ip || 'Local'}</code></td>
-            </tr>
-        `).join('');
+        body.innerHTML = data.map(log => {
+            // 根据风险等级决定 CSS 类
+            let rowClass = '';
+            let riskBadge = '';
+            if (log.risk_level === 1) {
+                rowClass = 'row-warning';
+                riskBadge = '<span class="risk-badge badge-1">异常时间</span>';
+            } else if (log.risk_level === 2) {
+                rowClass = 'row-danger';
+                riskBadge = '<span class="risk-badge badge-2">严重预警</span>';
+            }
+
+            return `
+                <tr class="${rowClass}">
+                    <td>#${log.id}</td>
+                    <td>${log.time}</td>
+                    <td>${log.operator}</td>
+                    <td><span class="action-log">${log.action}</span>${riskBadge}</td>
+                    <td>
+                        ${log.target || '--'}
+                        ${log.risk_msg ? `<small class="risk-desc">⚠️ ${log.risk_msg}</small>` : ''}
+                    </td>
+                    <td>${log.risk_level === 0 ? '正常' : '<strong>存在风险</strong>'}</td>
+                    <td><code>${log.ip || 'Local'}</code></td>
+                </tr>
+            `;
+        }).join('');
     }
 </script>
 </body>

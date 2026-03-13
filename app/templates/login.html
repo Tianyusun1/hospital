@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+
     <title>医疗设备借还管理系统 - 登录</title>
     <style>
         /* 定义全局色彩变量：治愈系医疗绿与极简灰白 */
         :root {
-            --primary-color: #059669;       /* 核心医疗绿，代表生机与希望 */
+            --primary-color: #059669;       /* 核心医疗绿 */
             --primary-hover: #047857;
-            --bg-color: #f0fdf4;            /* 非常浅的薄荷绿背景，缓解视觉疲劳 */
-            --text-main: #334155;           /* 柔和的深灰色字体，比纯黑更护眼 */
+            --bg-color: #f0fdf4;            /* 浅薄荷绿背景 */
+            --text-main: #334155;           /* 柔和深灰 */
             --text-muted: #64748b;
             --border-color: #e2e8f0;
         }
@@ -18,7 +20,6 @@
         body {
             font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif;
             background-color: var(--bg-color);
-            /* 增加非常微弱的背景渐变，提升空间感 */
             background-image: radial-gradient(circle at top right, #dcfce7 0%, transparent 40%),
                               radial-gradient(circle at bottom left, #dcfce7 0%, transparent 40%);
             display: flex;
@@ -32,7 +33,7 @@
         .login-wrapper {
             background-color: #ffffff;
             padding: 48px 40px;
-            border-radius: 20px; /* 圆润的边角，体现亲和力 */
+            border-radius: 20px;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
             width: 100%;
             max-width: 380px;
@@ -40,7 +41,7 @@
         }
 
         .login-wrapper:hover {
-            transform: translateY(-2px); /* 鼠标悬浮时微微浮起 */
+            transform: translateY(-2px);
         }
 
         .logo-area {
@@ -48,7 +49,6 @@
             margin-bottom: 32px;
         }
 
-        /* 用纯CSS画一个简约的医疗十字/图标背景 */
         .logo-icon {
             font-size: 32px;
             color: var(--primary-color);
@@ -97,14 +97,13 @@
             box-sizing: border-box;
             font-size: 15px;
             transition: all 0.3s ease;
-            background-color: #f8fafc; /* 输入框默认微灰，点击后变白 */
+            background-color: #f8fafc;
         }
 
         input:focus {
             border-color: var(--primary-color);
             background-color: #ffffff;
             outline: none;
-            /* 柔和的发光聚焦效果 */
             box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
         }
 
@@ -139,7 +138,7 @@
         }
 
         button:active {
-            transform: scale(0.98); /* 点击时的微缩反馈 */
+            transform: scale(0.98);
         }
 
         button:disabled {
@@ -177,6 +176,9 @@
 </div>
 
 <script>
+    // 【核心新增】：从 Meta 标签获取后端生成的 CSRF Token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
     document.getElementById('loginForm').addEventListener('submit', function(e) {
         e.preventDefault();
 
@@ -193,7 +195,9 @@
         fetch('/api/login', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                // 【核心新增】：在请求头中携带令牌，否则 Flask 会拦截请求并报 400 错误
+                'X-CSRFToken': csrfToken
             },
             body: JSON.stringify({
                 username: usernameInput,
@@ -204,10 +208,10 @@
         .then(data => {
             if (data.code === 200) {
                 loginBtn.innerText = '登录成功';
-                loginBtn.style.backgroundColor = '#10b981'; // 成功时变为更明亮的绿色
+                loginBtn.style.backgroundColor = '#10b981';
                 setTimeout(() => {
                     window.location.href = '/dashboard';
-                }, 300); // 稍微延迟一下，让用户看到成功状态
+                }, 300);
             } else {
                 errorMsgDiv.innerText = data.msg;
                 errorMsgDiv.style.display = 'block';

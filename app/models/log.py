@@ -20,6 +20,13 @@ class SysLog(db.Model):
     # 访问 IP (可选，增强审计安全性)
     ip_address = db.Column(db.String(50), nullable=True)
 
+    # --- 【核心新增】：风险预警相关字段 ---
+    # 风险等级：0-正常, 1-警告(如非工作时间操作), 2-危险(如超长借用)
+    risk_level = db.Column(db.Integer, default=0, nullable=False)
+
+    # 风险描述：记录具体的预警原因（如“检测到凌晨非工作时间登录”）
+    risk_msg = db.Column(db.String(255), nullable=True)
+
     # 操作时间 (对应图表：按时间筛选)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 

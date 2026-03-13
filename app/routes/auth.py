@@ -2,8 +2,10 @@
 from flask import Blueprint, request, jsonify, session, render_template, redirect, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from app.models.user import User, Role
-from app.models.log import SysLog  # 【新增】：导入系统日志模型
+from app.models.log import SysLog
 from app.extensions import db
+# --- 【核心新增】：导入安全校验工具 ---
+from app.utils.security import check_operation_risk
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -18,6 +20,8 @@ def login_page():
 
 @auth_bp.route('/api/login', methods=['POST'])
 def api_login():
+    # 安全提示：request.get_json() 在 Flask 中配合 SQLAlchemy
+    # 使用参数化查询，已自带防御基础 SQL 注入的能力。
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
@@ -25,6 +29,7 @@ def api_login():
     if not username or not password:
         return jsonify({'code': 400, 'msg': '账号或密码不能为空'})
 
+    # 使用 filter_by 是参数化查询，有效防止 SQL 注入
     user = User.query.filter_by(username=username).first()
 
     if user is None:
@@ -44,12 +49,17 @@ def api_login():
         session['real_name'] = user.real_name
         session['role_id'] = user.role_id
 
-        # 2. 【核心新增】：记录登录审计日志 (对应图表：自动记录关键操作)
+        # --- 【核心新增】：进行行为安全检测 ---
+        risk_level, risk_msg = check_operation_risk()
+
+        # 2. 记录登录审计日志（带风险判定）
         new_log = SysLog(
             user_id=user.id,
             action='登录',
             target=f"工号: {user.username}",
-            ip_address=request.remote_addr
+            ip_address=request.remote_addr,
+            risk_level=risk_level,  # 存储风险等级
+            risk_msg=risk_msg  # 存储风险描述
         )
         db.session.add(new_log)
         db.session.commit()
@@ -74,6 +84,7 @@ def api_register():
     department = data.get('department')
     phone = data.get('phone')
 
+    # 简单的输入验证
     if not all([username, password, real_name, department]):
         return jsonify({'code': 400, 'msg': '请填写所有必填项'})
 
@@ -98,26 +109,39 @@ def api_register():
     )
 
     db.session.add(new_user)
-    db.session.commit()
 
+    # 记录注册行为日志（注册也需判断时间风险）
+    r_risk_level, r_risk_msg = check_operation_risk()
+    reg_log = SysLog(
+        action='用户注册',
+        target=f"工号: {username}",
+        ip_address=request.remote_addr,
+        risk_level=r_risk_level,
+        risk_msg=r_risk_msg
+    )
+    db.session.add(reg_log)
+
+    db.session.commit()
     return jsonify({'code': 200, 'msg': '注册提交成功，请等待管理员审核'})
 
 
 # ================= 其他 =================
 @auth_bp.route('/api/logout', methods=['POST'])
 def api_logout():
-    # 1. 【核心新增】：在销毁会话前记录退出审计日志
     if 'user_id' in session:
+        # 退出也进行时间风险检测
+        l_risk_level, l_risk_msg = check_operation_risk()
         logout_log = SysLog(
             user_id=session['user_id'],
             action='退出',
             target=f"工号: {session['username']}",
-            ip_address=request.remote_addr
+            ip_address=request.remote_addr,
+            risk_level=l_risk_level,
+            risk_msg=l_risk_msg
         )
         db.session.add(logout_log)
         db.session.commit()
 
-    # 2. 安全退出，销毁会话
     session.clear()
     return jsonify({'code': 200, 'msg': '已安全退出'})
 

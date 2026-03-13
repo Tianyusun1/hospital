@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+
     <title>医疗设备借还管理系统 - 职工注册</title>
     <style>
         :root {
@@ -112,6 +114,9 @@
 </div>
 
 <script>
+    // 【核心新增】：获取 CSRF Token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
     document.getElementById('registerForm').addEventListener('submit', function(e) {
         e.preventDefault();
 
@@ -134,7 +139,11 @@
 
         fetch('/api/register', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                // 【核心新增】：添加 CSRF 请求头，否则会被 Flask 拦截
+                'X-CSRFToken': csrfToken
+            },
             body: JSON.stringify(data)
         })
         .then(res => res.json())

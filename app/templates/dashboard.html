@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>医疗设备借还管理系统 - 工作台</title>
     <style>
         :root {
@@ -12,6 +13,7 @@
             --sidebar-hover: #334155;
             --bg-color: #f1f5f9;
             --text-main: #334155;
+            --danger-color: #ef4444;
         }
         body {
             font-family: 'PingFang SC', sans-serif;
@@ -113,6 +115,27 @@
             border-color: #ef4444;
         }
 
+        /* 【核心新增】：报警横幅样式 */
+        .alert-banner {
+            display: none;
+            background-color: #fef2f2;
+            border: 1px solid #fee2e2;
+            color: var(--danger-color);
+            padding: 12px 25px;
+            margin: 20px 30px 0 30px;
+            border-radius: 8px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
         /* 工作区内容 */
         .workspace {
             padding: 30px;
@@ -164,6 +187,14 @@
             </div>
         </div>
 
+        {% if role_id == 1 %}
+        <div id="system-alert-banner" class="alert-banner" style="display: none;">
+            <span>⚠️ 异常行为警报：</span>
+            <span id="alert-content">系统检测到近期存在高风险操作记录。</span>
+            <a href="/admin/audit" style="color: var(--danger-color); margin-left: auto;">立即查看详情 &raquo;</a>
+        </div>
+        {% endif %}
+
         <div class="workspace">
             <div class="welcome-card">
                 <h1>欢迎使用医疗设备借还管理系统</h1>
@@ -171,15 +202,48 @@
                     系统遵循严格的 <strong>RBAC 权限标准</strong> 进行访问控制。<br>
                     您可以在左侧菜单中选择需要办理的业务。所有的操作记录均会被系统审计与保护。
                 </p>
+                <p id="user-notification" style="font-size: 14px; margin-top: 20px; color: #059669;"></p>
             </div>
         </div>
     </div>
 
     <script>
+        // 获取 CSRF Token
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // 如果是管理员，启动异常操作报警检查
+            {% if role_id == 1 %}
+                checkSystemAlerts();
+                // 每隔 5 分钟自动轮询一次
+                setInterval(checkSystemAlerts, 300000);
+            {% endif %}
+        });
+
+        // 【核心新增】：报警检查函数
+        function checkSystemAlerts() {
+            fetch('/admin/api/sys_logs/alerts')
+                .then(res => res.json())
+                .then(res => {
+                    if (res.code === 200 && (res.warning_total > 0 || res.danger_total > 0)) {
+                        const banner = document.getElementById('system-alert-banner');
+                        const content = document.getElementById('alert-content');
+                        banner.style.display = 'flex';
+                        content.innerText = `过去24小时内系统记录了 ${res.warning_total} 项异常行为（其中 ${res.danger_total} 项为严重预警），请及时审计。`;
+                    }
+                })
+                .catch(err => console.error("警报检查失败:", err));
+        }
+
         function logout() {
-            // 安全退出逻辑
-            fetch('/api/logout', { method: 'POST' })
-                .then(() => window.location.href = '/login');
+            // 安全退出逻辑，加入 CSRF Header
+            fetch('/api/logout', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
+            })
+            .then(() => window.location.href = '/login');
         }
     </script>
 </body>
