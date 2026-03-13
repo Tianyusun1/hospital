@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>借还审计日志 - 设备管理系统</title>
+    <title>系统审计日志 - 医疗设备管理系统</title>
     <style>
         :root {
             --primary-color: #059669;
@@ -10,84 +10,138 @@
             --text-main: #334155;
             --border-color: #e2e8f0;
         }
-        body { font-family: 'PingFang SC', sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 40px 20px; }
+        body { font-family: 'PingFang SC', sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 2px solid var(--bg-color); padding-bottom: 15px; }
-        .header h2 { margin: 0; color: var(--primary-color); }
 
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 14px; }
-        th { background-color: #f8fafc; color: #64748b; font-weight: 600; }
-        tr:hover { background-color: #f8fafc; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .header h2 { margin: 0; color: var(--primary-color); display: flex; align-items: center; gap: 10px; }
 
-        .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        /* 筛选栏 */
+        .filter-bar { background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 15px; align-items: flex-end; border: 1px solid var(--border-color); }
+        .filter-group { display: flex; flex-direction: column; gap: 5px; }
+        .filter-group label { font-size: 12px; font-weight: bold; color: #64748b; }
+        .filter-bar input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+        .btn-query { background: var(--primary-color); color: white; border: none; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+
+        /* 标签页切换 */
+        .tabs { display: flex; gap: 5px; margin-bottom: -1px; position: relative; z-index: 1; }
+        .tab { padding: 10px 20px; background: #e2e8f0; border: 1px solid var(--border-color); border-bottom: none; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 14px; font-weight: bold; color: #64748b; }
+        .tab.active { background: white; color: var(--primary-color); border-top: 3px solid var(--primary-color); }
+
+        /* 表格样式 */
+        .table-container { border: 1px solid var(--border-color); border-radius: 0 0 8px 8px; overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { padding: 14px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 13px; }
+        th { background-color: #f8fafc; color: #64748b; }
+        tr:hover { background-color: #fcfdfd; }
+
+        .status-badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
         .status-borrowing { background: #fee2e2; color: #991b1b; }
         .status-returned { background: #dcfce7; color: #166534; }
-
-        .nav-links a { color: var(--primary-color); text-decoration: none; font-weight: bold; margin-left: 20px; }
+        .action-log { color: #0369a1; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="header">
-        <h2>📝 全局借还审计日志</h2>
-        <div class="nav-links">
-            <a href="/dashboard">返回工作台</a>
-        </div>
+        <h2>📝 审计与系统日志</h2>
+        <a href="/dashboard" style="text-decoration: none; color: var(--primary-color); font-weight: bold;">返回工作台</a>
     </div>
 
-    <table>
-        <thead>
+    <div class="filter-bar">
+        <div class="filter-group">
+            <label>操作人 ID</label>
+            <input type="text" id="filter_user_id" placeholder="输入用户ID">
+        </div>
+        <div class="filter-group">
+            <label>起始日期</label>
+            <input type="date" id="filter_date">
+        </div>
+        <button class="btn-query" onclick="loadData()">🔍 立即查询</button>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" id="tab_borrow" onclick="switchTab('borrow')">设备借还流水</div>
+        <div class="tab" id="tab_sys" onclick="switchTab('sys')">系统操作日志</div>
+    </div>
+
+    <div class="table-container">
+        <table id="mainTable">
+            <thead id="tableHead">
+                </thead>
+            <tbody id="tableBody">
+                </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let currentTab = 'borrow';
+
+    document.addEventListener('DOMContentLoaded', loadData);
+
+    function switchTab(tab) {
+        currentTab = tab;
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.getElementById(`tab_${tab}`).classList.add('active');
+        loadData();
+    }
+
+    function loadData() {
+        const userId = document.getElementById('filter_user_id').value;
+        const date = document.getElementById('filter_date').value;
+
+        if (currentTab === 'borrow') {
+            fetchBorrowLogs();
+        } else {
+            fetchSysLogs(userId, date);
+        }
+    }
+
+    // 1. 获取设备借还专题日志
+    function fetchBorrowLogs() {
+        fetch('/admin/api/audit/list')
+            .then(res => res.json())
+            .then(res => {
+                if(res.code === 200) renderBorrowTable(res.data);
+            });
+    }
+
+    // 2. 获取全局系统操作审计日志 (支持筛选)
+    function fetchSysLogs(userId, date) {
+        let url = `/admin/api/sys_logs/list?user_id=${userId}&start_date=${date}`;
+        fetch(url)
+            .then(res => res.json())
+            .then(res => {
+                if(res.code === 200) renderSysTable(res.data);
+            });
+    }
+
+    function renderBorrowTable(data) {
+        const head = document.getElementById('tableHead');
+        const body = document.getElementById('tableBody');
+
+        head.innerHTML = `
             <tr>
-                <th>操作记录ID</th>
+                <th>记录ID</th>
                 <th>设备名称</th>
-                <th>序列号</th>
                 <th>借用人</th>
                 <th>科室</th>
                 <th>借出时间</th>
                 <th>归还时间</th>
-                <th>当前状态</th>
+                <th>状态</th>
             </tr>
-        </thead>
-        <tbody id="auditTableBody">
-            </tbody>
-    </table>
-</div>
+        `;
 
-<script>
-    document.addEventListener('DOMContentLoaded', fetchAuditLogs);
-
-    function fetchAuditLogs() {
-        fetch('/admin/api/audit/list')
-            .then(res => res.json())
-            .then(data => {
-                if (data.code === 200) {
-                    renderTable(data.data);
-                } else {
-                    alert('权限不足或获取失败');
-                    window.location.href = '/dashboard';
-                }
-            })
-            .catch(err => console.error('Error:', err));
-    }
-
-    function renderTable(logs) {
-        const tbody = document.getElementById('auditTableBody');
-        if (logs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">暂无任何借还记录</td></tr>';
-            return;
-        }
-
-        tbody.innerHTML = logs.map(log => `
+        body.innerHTML = data.map(log => `
             <tr>
                 <td>#${log.id}</td>
-                <td><strong>${log.equipment_name}</strong></td>
-                <td><code>${log.serial_number}</code></td>
+                <td><strong>${log.equipment_name}</strong><br><small>${log.serial_number}</small></td>
                 <td>${log.user_name}</td>
                 <td>${log.department}</td>
                 <td>${log.borrow_time}</td>
-                <td>${log.return_time}</td>
+                <td>${log.return_time || '--'}</td>
                 <td>
                     <span class="status-badge ${log.status === '借用中' ? 'status-borrowing' : 'status-returned'}">
                         ${log.status}
@@ -96,7 +150,33 @@
             </tr>
         `).join('');
     }
-</script>
 
+    function renderSysTable(data) {
+        const head = document.getElementById('tableHead');
+        const body = document.getElementById('tableBody');
+
+        head.innerHTML = `
+            <tr>
+                <th>日志ID</th>
+                <th>操作时间</th>
+                <th>操作人</th>
+                <th>动作</th>
+                <th>操作对象/备注</th>
+                <th>IP地址</th>
+            </tr>
+        `;
+
+        body.innerHTML = data.map(log => `
+            <tr>
+                <td>#${log.id}</td>
+                <td>${log.time}</td>
+                <td>${log.operator}</td>
+                <td><span class="action-log">${log.action}</span></td>
+                <td>${log.target || '--'}</td>
+                <td><code>${log.ip || 'Local'}</code></td>
+            </tr>
+        `).join('');
+    }
+</script>
 </body>
 </html>

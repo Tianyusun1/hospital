@@ -10,6 +10,9 @@ class Equipment(db.Model):
     name = db.Column(db.String(100), nullable=False)  # 设备名称
     serial_number = db.Column(db.String(50), unique=True, nullable=False)  # 设备编号
 
+    # --- 新增：设备规格/备注 (对应图表：录入核心信息 / 修改设备信息) ---
+    specification = db.Column(db.String(255), nullable=True)
+
     # 状态码：0-在库, 1-已借出, 2-维修中, 3-报废
     status = db.Column(db.Integer, default=0, nullable=False)
 
@@ -35,6 +38,11 @@ class BorrowRecord(db.Model):
 
     # 时间追踪
     borrow_time = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    # --- 【核心新增】：预计归还时间 (对应图表：逾期标注) ---
+    # 逻辑：在借用操作时存入。若当前时间 > due_time 且 status 为 'borrowing'，则判定为逾期
+    due_time = db.Column(db.DateTime, nullable=True)
+
     return_time = db.Column(db.DateTime, nullable=True)
 
     # 状态：'borrowing' (借用中), 'returned' (已归还)

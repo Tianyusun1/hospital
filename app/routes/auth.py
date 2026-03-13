@@ -2,6 +2,7 @@
 from flask import Blueprint, request, jsonify, session, render_template, redirect, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from app.models.user import User, Role
+from app.models.log import SysLog  # 【新增】：导入系统日志模型
 from app.extensions import db
 
 auth_bp = Blueprint('auth', __name__)
@@ -29,7 +30,7 @@ def api_login():
     if user is None:
         return jsonify({'code': 401, 'msg': '该工号不存在，请先注册'})
 
-    # 【新增拦截逻辑】检查账号状态
+    # 检查账号状态 (RBAC 核心逻辑)
     if user.status == 'pending':
         return jsonify({'code': 403, 'msg': '账号正在等待管理员审核，请耐心等待'})
     elif user.status == 'rejected':
@@ -37,10 +38,22 @@ def api_login():
 
     # 验证密码
     if check_password_hash(user.password_hash, password):
+        # 1. 设置 Session 保持登录状态
         session['user_id'] = user.id
         session['username'] = user.username
-        session['real_name'] = user.real_name  # 存入真实姓名
+        session['real_name'] = user.real_name
         session['role_id'] = user.role_id
+
+        # 2. 【核心新增】：记录登录审计日志 (对应图表：自动记录关键操作)
+        new_log = SysLog(
+            user_id=user.id,
+            action='登录',
+            target=f"工号: {user.username}",
+            ip_address=request.remote_addr
+        )
+        db.session.add(new_log)
+        db.session.commit()
+
         return jsonify({'code': 200, 'msg': '登录成功'})
     else:
         return jsonify({'code': 401, 'msg': '密码错误'})
@@ -61,22 +74,18 @@ def api_register():
     department = data.get('department')
     phone = data.get('phone')
 
-    # 基础校验
     if not all([username, password, real_name, department]):
         return jsonify({'code': 400, 'msg': '请填写所有必填项'})
 
-    # 检查工号是否已被注册
     if User.query.filter_by(username=username).first():
         return jsonify({'code': 400, 'msg': '该工号已注册，请直接登录或联系管理员'})
 
-    # 获取默认的普通用户角色 (如果数据库没有 user 角色，需要先创建)
     default_role = Role.query.filter_by(role_name='user').first()
     if not default_role:
         default_role = Role(role_name='user', description='普通医护人员')
         db.session.add(default_role)
         db.session.commit()
 
-    # 创建新用户，状态默认为 'pending' (待审核)
     hashed_pw = generate_password_hash(password)
     new_user = User(
         username=username,
@@ -85,7 +94,7 @@ def api_register():
         department=department,
         phone=phone,
         role_id=default_role.id,
-        status='pending'  # 新注册用户待审核
+        status='pending'
     )
 
     db.session.add(new_user)
@@ -97,17 +106,27 @@ def api_register():
 # ================= 其他 =================
 @auth_bp.route('/api/logout', methods=['POST'])
 def api_logout():
+    # 1. 【核心新增】：在销毁会话前记录退出审计日志
+    if 'user_id' in session:
+        logout_log = SysLog(
+            user_id=session['user_id'],
+            action='退出',
+            target=f"工号: {session['username']}",
+            ip_address=request.remote_addr
+        )
+        db.session.add(logout_log)
+        db.session.commit()
+
+    # 2. 安全退出，销毁会话
     session.clear()
     return jsonify({'code': 200, 'msg': '已安全退出'})
 
 
-# 【关键修改】：将原来的硬编码返回改为了渲染 dashboard.html 模板
 @auth_bp.route('/dashboard')
 def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('auth.login_page'))
 
-    # 渲染真实的 HTML 模板，并把用户的角色和姓名传给前端
     return render_template('dashboard.html',
                            real_name=session.get('real_name', session.get('username')),
                            role_id=session.get('role_id'))
