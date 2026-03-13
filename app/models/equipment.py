@@ -1,74 +1,45 @@
-# 文件位置：app/routes/equipment.py
-from flask import Blueprint, request, jsonify, render_template, session, redirect, url_for
+# 文件位置：app/models/equipment.py
 from app.extensions import db
-from app.models.equipment import Equipment
-from app.utils.decorators import admin_required
-
-# 创建医疗设备管理的蓝图
-equipment_bp = Blueprint('equipment', __name__, url_prefix='/equipment')
+from datetime import datetime
 
 
-# 1. 展示设备管理页面 (前端界面)
-@equipment_bp.route('/', methods=['GET'])
-def equipment_page():
-    # 只要登录了就可以看页面，前端会根据 role_id 决定显不显示“新增”按钮
-    if 'user_id' not in session:
-        return redirect(url_for('auth.login_page'))
-    return render_template('equipment/index.html', role_id=session.get('role_id'))
+class Equipment(db.Model):
+    __tablename__ = 'equipments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)  # 设备名称
+    serial_number = db.Column(db.String(50), unique=True, nullable=False)  # 设备编号
+
+    # 状态码：0-在库, 1-已借出, 2-维修中, 3-报废
+    status = db.Column(db.Integer, default=0, nullable=False)
+
+    # --- 租借相关字段 ---
+    current_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # 当前借用人
+    borrow_time = db.Column(db.DateTime, nullable=True)  # 借出时间
+
+    # --- 基础字段 ---
+    added_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # 录入管理员
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # 建立关联关系
+    registrar = db.relationship('User', foreign_keys=[added_by])
+    borrower = db.relationship('User', foreign_keys=[current_user_id])
 
 
-# 2. API：获取设备列表 (所有人均可查看)
-@equipment_bp.route('/api/list', methods=['GET'])
-def get_equipment_list():
-    if 'user_id' not in session:
-        return jsonify({'code': 401, 'msg': '请先登录'})
+class BorrowRecord(db.Model):
+    __tablename__ = 'borrow_records'
 
-    # 按录入时间倒序查询所有设备
-    equipments = Equipment.query.order_by(Equipment.created_at.desc()).all()
+    id = db.Column(db.Integer, primary_key=True)
+    equipment_id = db.Column(db.Integer, db.ForeignKey('equipments.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
-    data = []
-    for eq in equipments:
-        # 状态字典映射
-        status_map = {0: '在库', 1: '已借出', 2: '维修中', 3: '报废'}
+    # 时间追踪
+    borrow_time = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    return_time = db.Column(db.DateTime, nullable=True)
 
-        data.append({
-            'id': eq.id,
-            'name': eq.name,
-            'serial_number': eq.serial_number,
-            'status_code': eq.status,
-            'status_text': status_map.get(eq.status, '未知状态'),
-            'added_by': eq.registrar.real_name if eq.registrar else '系统',
-            'created_at': eq.created_at.strftime('%Y-%m-%d %H:%M')
-        })
+    # 状态：'borrowing' (借用中), 'returned' (已归还)
+    status = db.Column(db.String(20), default='borrowing', nullable=False)
 
-    return jsonify({'code': 200, 'data': data})
-
-
-# 3. API：新增医疗设备 (RBAC拦截：仅限管理员)
-@equipment_bp.route('/api/add', methods=['POST'])
-@admin_required
-def add_equipment():
-    data = request.get_json()
-    name = data.get('name')
-    serial_number = data.get('serial_number')
-
-    if not name or not serial_number:
-        return jsonify({'code': 400, 'msg': '设备名称和设备编号不能为空'})
-
-    # 检查设备编号是否在数据库中已存在 (防重复录入)
-    existing_eq = Equipment.query.filter_by(serial_number=serial_number).first()
-    if existing_eq:
-        return jsonify({'code': 400, 'msg': f'录入失败！编号 {serial_number} 已被占用'})
-
-    # 创建新设备实体，默认状态为 0 (在库)
-    new_eq = Equipment(
-        name=name,
-        serial_number=serial_number,
-        status=0,
-        added_by=session['user_id']  # 记录是哪个管理员录入的
-    )
-
-    db.session.add(new_eq)
-    db.session.commit()
-
-    return jsonify({'code': 200, 'msg': '新设备录入成功！'})
+    # 建立关联，方便跨表查询设备名称和借用人姓名
+    equipment = db.relationship('Equipment', backref=db.backref('borrow_history', lazy=True))
+    user = db.relationship('User', backref=db.backref('borrow_history', lazy=True))

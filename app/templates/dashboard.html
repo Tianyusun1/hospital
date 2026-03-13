@@ -138,13 +138,12 @@
             <a href="/dashboard" class="active">🏠 工作台首页</a>
 
             <div class="menu-title">业务操作</div>
-            <a href="#">📦 设备列表 (待开发)</a>
-            <a href="#">🔄 设备借还 (待开发)</a>
+            <a href="/equipment/">📦 设备管理 (录入/借还)</a>
 
             {% if role_id == 1 %}
             <div class="menu-title">系统管理 (管理员专属)</div>
             <a href="/admin/users/review">👥 入网审核</a>
-            <a href="#">📝 审计日志 (待开发)</a>
+            <a href="/admin/audit">📝 审计日志</a>
             {% endif %}
         </div>
     </div>
@@ -178,6 +177,7 @@
 
     <script>
         function logout() {
+            // 安全退出逻辑
             fetch('/api/logout', { method: 'POST' })
                 .then(() => window.location.href = '/login');
         }

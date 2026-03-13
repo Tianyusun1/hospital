@@ -17,7 +17,6 @@ def create_app():
     from app.routes.admin import admin_bp
     app.register_blueprint(admin_bp)
 
-    # 【新增】：导入并注册医疗设备管理蓝图
     from app.routes.equipment import equipment_bp
     app.register_blueprint(equipment_bp)
 
