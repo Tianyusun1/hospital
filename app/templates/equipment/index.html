@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>设备管理 - 医疗设备管理系统</title>
     <style>
         :root {
@@ -63,7 +64,8 @@
             <tr>
                 <th>设备名称</th>
                 <th>序列号</th>
-                <th>规格描述</th> <th>状态/应还时间</th>
+                <th>规格描述</th>
+                <th>状态/应还时间</th>
                 <th>录入人</th>
                 <th>操作</th>
             </tr>
@@ -100,6 +102,7 @@
     document.addEventListener('DOMContentLoaded', fetchEquipments);
 
     function fetchEquipments() {
+        // GET 请求无需 CSRF Token
         fetch('/equipment/api/list')
             .then(res => res.json())
             .then(res => {
@@ -147,14 +150,22 @@
         handleAction(id, 'borrow', { days: 7 });
     }
 
+    // 归还处理
     function handleReturn(id) {
         handleAction(id, 'return');
     }
 
+    // 统一的设备操作请求 (借用/归还)
     function handleAction(id, action, extraData = {}) {
+        // 【核心修复】：获取 CSRF Token
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
         fetch(`/equipment/api/${action}`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken  // 【核心修复】：携带 Token 发送请求
+            },
             body: JSON.stringify({ equipment_id: id, ...extraData })
         })
         .then(res => res.json())
@@ -192,6 +203,7 @@
         document.getElementById('eq_spec').value = '';
     }
 
+    // 提交设备数据 (新增/更新)
     function saveEquipment() {
         const id = document.getElementById('edit_id').value;
         const url = id ? '/equipment/api/update' : '/equipment/api/add';
@@ -202,9 +214,15 @@
         };
         if (id) data.id = id;
 
+        // 【核心修复】：获取 CSRF Token
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
         fetch(url, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken // 【核心修复】：携带 Token 发送请求
+            },
             body: JSON.stringify(data)
         })
         .then(res => res.json())

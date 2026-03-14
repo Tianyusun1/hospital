@@ -4,12 +4,10 @@ from datetime import datetime, timedelta
 # =================配置区域=================
 # 定义正常办公时间 (24小时制)
 WORKING_HOUR_START = 8  # 早上 8 点
-WORKING_HOUR_END = 20  # 晚上 8 点
+WORKING_HOUR_END = 24  # 晚上 12 点
 
 # 定义设备超长使用阈值 (天)
 MAX_BORROW_DAYS = 14
-
-
 # ==========================================
 
 def check_operation_risk():
@@ -18,12 +16,14 @@ def check_operation_risk():
     返回: (risk_level, message)
     risk_level: 0-正常, 1-警告(非工作时间操作)
     """
-    now = datetime.now()
-    current_hour = now.hour
+    # 【核心修复】：获取 UTC 时间并转为北京时间 (UTC+8) 来准确判断办公时间
+    now_utc = datetime.utcnow()
+    now_beijing = now_utc + timedelta(hours=8)
+    current_hour = now_beijing.hour
 
     # 判断是否在非办公时间
     if current_hour < WORKING_HOUR_START or current_hour >= WORKING_HOUR_END:
-        return 1, f"非工作时间异常操作 (当前时间: {now.strftime('%H:%M')})"
+        return 1, f"非工作时间异常操作 (当前时间: {now_beijing.strftime('%H:%M')})"
 
     return 0, "正常时间操作"
 
@@ -38,7 +38,8 @@ def check_borrow_duration_risk(borrow_time):
     if not borrow_time:
         return 0, ""
 
-    now = datetime.now()
+    # 【核心修复】：数据库里的 borrow_time 是 UTC 时间，必须用 utcnow() 相减才能得出正确天数
+    now = datetime.utcnow()
     duration = now - borrow_time
 
     # 如果借用时长超过设定的阈值 (例如14天)

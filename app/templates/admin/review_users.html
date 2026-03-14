@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>用户入网审核 - 设备借还管理系统</title>
     <style>
         :root {
@@ -147,6 +148,7 @@
     // 获取待审核用户列表
     function fetchPendingUsers() {
         // 注意：因为我们在蓝图加了 url_prefix='/admin'，所以接口路径是 /admin/api/...
+        // GET 请求不需要 CSRF Token
         fetch('/admin/api/users/pending')
             .then(res => res.json())
             .then(data => {
@@ -199,9 +201,15 @@
             return;
         }
 
+        // 【修复点2】：获取 meta 标签中的 CSRF Token
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
         fetch('/admin/api/users/do_review', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken  // 【核心修复】：请求头中携带 CSRF Token
+            },
             body: JSON.stringify({ user_id: userId, action: action })
         })
         .then(res => res.json())
@@ -218,8 +226,15 @@
 
     // 退出登录逻辑
     function logout() {
-        fetch('/api/logout', { method: 'POST' })
-            .then(() => window.location.href = '/login');
+        // 【修复点3】：退出登录的 POST 请求同样需要 CSRF Token
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+        fetch('/api/logout', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            }
+        }).then(() => window.location.href = '/login');
     }
 
     // 显示顶部提示框

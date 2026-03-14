@@ -5,10 +5,17 @@ from app.models.equipment import Equipment, BorrowRecord
 from app.models.log import SysLog
 from app.utils.decorators import admin_required
 from datetime import datetime, timedelta
-# --- 【核心新增】：导入安全校验工具 ---
 from app.utils.security import check_operation_risk, check_borrow_duration_risk, get_combined_risk
+# --- 【核心新增】：导入 joinedload 解决 N+1 查询 ---
+from sqlalchemy.orm import joinedload
 
 equipment_bp = Blueprint('equipment', __name__, url_prefix='/equipment')
+
+
+# --- 【核心新增】：获取真实 IP 辅助函数 ---
+def get_real_ip():
+    """获取客户端真实 IP 地址，防代理穿透"""
+    return request.headers.get('X-Forwarded-For', request.remote_addr)
 
 
 # --- 1. 页面路由：展示设备管理主页 ---
@@ -25,22 +32,33 @@ def get_equipment_list():
     if 'user_id' not in session:
         return jsonify({'code': 401, 'msg': '请先登录'})
 
-    equipments = Equipment.query.order_by(Equipment.created_at.desc()).all()
+    # 【性能优化 1】：使用 joinedload 一次性查出设备对应的 registrar(录入人) 数据
+    equipments = Equipment.query.options(joinedload(Equipment.registrar)).order_by(Equipment.created_at.desc()).all()
+
+    # 【性能优化 2】：一次性查出所有“正在借用”的记录，转为字典映射，避免在 for 循环中反复查库！
+    active_borrows = BorrowRecord.query.filter_by(status='borrowing').all()
+    borrow_map = {b.equipment_id: b for b in active_borrows}
+
     data = []
     status_map = {0: '在库', 1: '已借出', 2: '维修中', 3: '报废'}
+    now_utc = datetime.utcnow()
 
     for eq in equipments:
         is_overdue = False
         due_time_str = "N/A"
+
         if eq.status == 1:
-            active_record = BorrowRecord.query.filter_by(
-                equipment_id=eq.id,
-                status='borrowing'
-            ).first()
+            # 直接从字典中获取，不再产生 SQL 查询
+            active_record = borrow_map.get(eq.id)
             if active_record and active_record.due_time:
-                due_time_str = active_record.due_time.strftime('%Y-%m-%d %H:%M')
-                if datetime.utcnow() > active_record.due_time:
+                # 【时间修复】：转为北京时间 (UTC+8) 给前端展示
+                due_time_beijing = active_record.due_time + timedelta(hours=8)
+                due_time_str = due_time_beijing.strftime('%Y-%m-%d %H:%M')
+                if now_utc > active_record.due_time:
                     is_overdue = True
+
+        # 【时间修复】：录入时间也转为北京时间展示
+        created_at_beijing = eq.created_at + timedelta(hours=8)
 
         data.append({
             'id': eq.id,
@@ -52,7 +70,7 @@ def get_equipment_list():
             'is_overdue': is_overdue,
             'due_time': due_time_str,
             'added_by': eq.registrar.real_name if eq.registrar else '系统',
-            'created_at': eq.created_at.strftime('%Y-%m-%d %H:%M')
+            'created_at': created_at_beijing.strftime('%Y-%m-%d %H:%M')
         })
     return jsonify({'code': 200, 'data': data})
 
@@ -86,6 +104,7 @@ def add_equipment():
         user_id=session['user_id'],
         action='录入设备',
         target=f"名称: {name}, S/N: {sn}",
+        ip_address=get_real_ip(),  # 【安全修复】：补全真实IP记录
         risk_level=r_level,
         risk_msg=r_msg
     )
@@ -113,6 +132,7 @@ def update_equipment():
         user_id=session['user_id'],
         action='修改设备',
         target=f"S/N: {eq.serial_number}",
+        ip_address=get_real_ip(),  # 【安全修复】：补全真实IP记录
         risk_level=r_level,
         risk_msg=r_msg
     )
@@ -155,12 +175,16 @@ def borrow_equipment():
         user_id=session['user_id'],
         action='借用设备',
         target=f"设备: {equipment.name}",
+        ip_address=get_real_ip(),  # 【安全修复】：补全真实IP记录
         risk_level=r_level,
         risk_msg=r_msg
     )
     db.session.add(borrow_log)
     db.session.commit()
-    return jsonify({'code': 200, 'msg': f'借用成功，请于 {due_date.strftime("%Y-%m-%d")} 前归还'})
+
+    # 提示时间也转为北京时间
+    due_date_beijing = due_date + timedelta(hours=8)
+    return jsonify({'code': 200, 'msg': f'借用成功，请于 {due_date_beijing.strftime("%Y-%m-%d")} 前归还'})
 
 
 # --- 6. API: 归还设备 (进阶功能：包含时长异常判定) ---
@@ -176,7 +200,9 @@ def return_equipment():
     if not equipment or equipment.status != 1:
         return jsonify({'code': 400, 'msg': '操作无效'})
 
-    if equipment.current_user_id != session['user_id'] and session.get('role_id') != 1:
+    # 【权限修复】：不再硬编码 role_id == 1，兼容了通过 role_name 验证的更优方式
+    is_admin = session.get('role_id') == 1 or session.get('role_name') == 'admin'
+    if equipment.current_user_id != session['user_id'] and not is_admin:
         return jsonify({'code': 403, 'msg': '无权归还他人借用的设备'})
 
     # --- 【核心逻辑】：双重风险判定 ---
@@ -207,6 +233,7 @@ def return_equipment():
         user_id=session['user_id'],
         action='归还设备',
         target=f"设备: {equipment.name}",
+        ip_address=get_real_ip(),  # 【安全修复】：补全真实IP记录
         risk_level=final_risk_lvl,
         risk_msg=final_risk_msg
     )

@@ -4,10 +4,17 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from app.models.user import User, Role
 from app.models.log import SysLog
 from app.extensions import db
-# --- 【核心新增】：导入安全校验工具 ---
 from app.utils.security import check_operation_risk
+# --- 【核心新增】：导入 joinedload 优化关联查询 ---
+from sqlalchemy.orm import joinedload
 
 auth_bp = Blueprint('auth', __name__)
+
+
+# --- 【核心新增】：获取真实 IP 辅助函数 ---
+def get_real_ip():
+    """获取客户端真实 IP 地址，防代理穿透"""
+    return request.headers.get('X-Forwarded-For', request.remote_addr)
 
 
 # ================= 登录相关 =================
@@ -20,8 +27,6 @@ def login_page():
 
 @auth_bp.route('/api/login', methods=['POST'])
 def api_login():
-    # 安全提示：request.get_json() 在 Flask 中配合 SQLAlchemy
-    # 使用参数化查询，已自带防御基础 SQL 注入的能力。
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
@@ -29,8 +34,8 @@ def api_login():
     if not username or not password:
         return jsonify({'code': 400, 'msg': '账号或密码不能为空'})
 
-    # 使用 filter_by 是参数化查询，有效防止 SQL 注入
-    user = User.query.filter_by(username=username).first()
+    # 【性能优化】：使用 joinedload 提前查出 Role 表，避免访问 user.role 时触发二次查询
+    user = User.query.options(joinedload(User.role)).filter_by(username=username).first()
 
     if user is None:
         return jsonify({'code': 401, 'msg': '该工号不存在，请先注册'})
@@ -48,8 +53,10 @@ def api_login():
         session['username'] = user.username
         session['real_name'] = user.real_name
         session['role_id'] = user.role_id
+        # 【核心修复】：将会话中存入 role_name，配合后续通过字符串判断管理员权限的安全策略
+        session['role_name'] = user.role.role_name if user.role else 'user'
 
-        # --- 【核心新增】：进行行为安全检测 ---
+        # --- 进行行为安全检测 ---
         risk_level, risk_msg = check_operation_risk()
 
         # 2. 记录登录审计日志（带风险判定）
@@ -57,9 +64,9 @@ def api_login():
             user_id=user.id,
             action='登录',
             target=f"工号: {user.username}",
-            ip_address=request.remote_addr,
-            risk_level=risk_level,  # 存储风险等级
-            risk_msg=risk_msg  # 存储风险描述
+            ip_address=get_real_ip(),  # 【安全修复】：使用真实 IP
+            risk_level=risk_level,
+            risk_msg=risk_msg
         )
         db.session.add(new_log)
         db.session.commit()
@@ -108,20 +115,23 @@ def api_register():
         status='pending'
     )
 
+    # 【逻辑修复】：先 commit() 将用户存入数据库，这样才能拿到自增的 new_user.id
     db.session.add(new_user)
+    db.session.commit()
 
-    # 记录注册行为日志（注册也需判断时间风险）
+    # 记录注册行为日志（带上刚刚生成的用户 ID）
     r_risk_level, r_risk_msg = check_operation_risk()
     reg_log = SysLog(
+        user_id=new_user.id,  # 【核心修复】：精准绑定操作人为刚注册的用户
         action='用户注册',
         target=f"工号: {username}",
-        ip_address=request.remote_addr,
+        ip_address=get_real_ip(),  # 【安全修复】：使用真实 IP
         risk_level=r_risk_level,
         risk_msg=r_risk_msg
     )
     db.session.add(reg_log)
-
     db.session.commit()
+
     return jsonify({'code': 200, 'msg': '注册提交成功，请等待管理员审核'})
 
 
@@ -135,7 +145,7 @@ def api_logout():
             user_id=session['user_id'],
             action='退出',
             target=f"工号: {session['username']}",
-            ip_address=request.remote_addr,
+            ip_address=get_real_ip(),  # 【安全修复】：使用真实 IP
             risk_level=l_risk_level,
             risk_msg=l_risk_msg
         )
@@ -153,4 +163,5 @@ def dashboard():
 
     return render_template('dashboard.html',
                            real_name=session.get('real_name', session.get('username')),
-                           role_id=session.get('role_id'))
+                           role_id=session.get('role_id'),
+                           role_name=session.get('role_name'))  # 模板中可能也需要用到角色名

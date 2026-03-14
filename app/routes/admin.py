@@ -6,12 +6,18 @@ from app.models.equipment import BorrowRecord
 from app.models.log import SysLog
 from app.utils.decorators import admin_required
 from werkzeug.security import generate_password_hash
-# --- 【修复】：同时导入 datetime 类和 timedelta 类 ---
 from datetime import datetime, timedelta
-# --- 【核心新增】：导入安全校验工具 ---
 from app.utils.security import check_operation_risk
+# --- 【核心修复1】：导入 joinedload 用于解决 N+1 查询性能瓶颈 ---
+from sqlalchemy.orm import joinedload
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
+
+
+# --- 【核心修复2】：新增获取真实 IP 的辅助函数 ---
+def get_real_ip():
+    """获取客户端真实 IP 地址，防代理穿透"""
+    return request.headers.get('X-Forwarded-For', request.remote_addr)
 
 
 # ================= 1. 用户审核与管理 =================
@@ -63,14 +69,14 @@ def do_review():
         user.status = 'rejected'
         msg = f'已拒绝 {user.real_name} 的入网申请'
 
-    # --- 行为安全检测 (管理员凌晨审核用户也属于异常) ---
+    # --- 行为安全检测 ---
     r_level, r_msg = check_operation_risk()
 
     review_log = SysLog(
         user_id=session.get('user_id'),
         action='用户审核',
         target=f"用户: {user.real_name}, 动作: {action}",
-        ip_address=request.remote_addr,
+        ip_address=get_real_ip(),  # 使用真实 IP
         risk_level=r_level,
         risk_msg=r_msg
     )
@@ -82,7 +88,8 @@ def do_review():
 @admin_bp.route('/api/users/all', methods=['GET'])
 @admin_required
 def get_all_users():
-    users = User.query.filter(User.status != 'pending').all()
+    # 【性能优化】：使用 joinedload 预先加载 role 表，避免 for 循环中发生 N+1 查询
+    users = User.query.options(joinedload(User.role)).filter(User.status != 'pending').all()
     data = [{
         'id': u.id,
         'username': u.username,
@@ -115,7 +122,7 @@ def update_user_info():
         user_id=session.get('user_id'),
         action='修改用户信息',
         target=f"目标用户: {user.username}",
-        ip_address=request.remote_addr,
+        ip_address=get_real_ip(),  # 使用真实 IP
         risk_level=r_level,
         risk_msg=r_msg
     )
@@ -135,15 +142,20 @@ def audit_page():
 @admin_bp.route('/api/audit/list', methods=['GET'])
 @admin_required
 def get_borrow_logs():
-    records = BorrowRecord.query.order_by(BorrowRecord.borrow_time.desc()).all()
+    # 【性能优化】：使用 joinedload 一次性查出借还记录对应的 equipment 和 user 数据
+    records = BorrowRecord.query.options(
+        joinedload(BorrowRecord.equipment),
+        joinedload(BorrowRecord.user)
+    ).order_by(BorrowRecord.borrow_time.desc()).all()
+
     log_list = []
     for r in records:
         log_list.append({
             'id': r.id,
-            'equipment_name': r.equipment.name,
-            'serial_number': r.equipment.serial_number,
-            'user_name': r.user.real_name,
-            'department': r.user.department,
+            'equipment_name': r.equipment.name if r.equipment else '设备已删除',
+            'serial_number': r.equipment.serial_number if r.equipment else 'N/A',
+            'user_name': r.user.real_name if r.user else '用户已删除',
+            'department': r.user.department if r.user else 'N/A',
             'borrow_time': r.borrow_time.strftime('%Y-%m-%d %H:%M:%S'),
             'return_time': r.return_time.strftime('%Y-%m-%d %H:%M:%S') if r.return_time else '借用中',
             'status': '已归还' if r.status == 'returned' else '借用中'
@@ -151,7 +163,6 @@ def get_borrow_logs():
     return jsonify({'code': 200, 'data': log_list})
 
 
-# --- 【重点升级】：支持风险筛选的系统日志接口 ---
 @admin_bp.route('/api/sys_logs/list', methods=['GET'])
 @admin_required
 def get_sys_logs():
@@ -159,7 +170,8 @@ def get_sys_logs():
     start_date = request.args.get('start_date')
     risk_level = request.args.get('risk_level')
 
-    query = SysLog.query
+    # 【性能优化】：预先联合查询 operator (User 表)，解决原来列表推导式引发的数据库性能崩塌
+    query = SysLog.query.options(joinedload(SysLog.operator))
 
     if operator_id:
         query = query.filter_by(user_id=operator_id)
@@ -188,12 +200,10 @@ def get_sys_logs():
     return jsonify({'code': 200, 'data': data})
 
 
-# --- 【新增/修复】：告警摘要 API ---
 @admin_bp.route('/api/sys_logs/alerts', methods=['GET'])
 @admin_required
 def get_log_alerts():
     """获取最近 24 小时内的高风险操作数量"""
-    # 【修复】：简化了时间计算逻辑，并直接使用已导入的 timedelta
     one_day_ago = datetime.utcnow() - timedelta(days=1)
 
     warning_count = SysLog.query.filter(SysLog.risk_level > 0, SysLog.created_at >= one_day_ago).count()
