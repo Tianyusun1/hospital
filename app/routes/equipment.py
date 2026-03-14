@@ -6,19 +6,17 @@ from app.models.log import SysLog
 from app.utils.decorators import admin_required
 from datetime import datetime, timedelta
 from app.utils.security import check_operation_risk, check_borrow_duration_risk, get_combined_risk
-# --- 【核心新增】：导入 joinedload 解决 N+1 查询 ---
 from sqlalchemy.orm import joinedload
 
 equipment_bp = Blueprint('equipment', __name__, url_prefix='/equipment')
 
 
-# --- 【核心新增】：获取真实 IP 辅助函数 ---
 def get_real_ip():
-    """获取客户端真实 IP 地址，防代理穿透"""
+    """获取客户端真实 IP 地址"""
     return request.headers.get('X-Forwarded-For', request.remote_addr)
 
 
-# --- 1. 页面路由：展示设备管理主页 ---
+# --- 1. 页面路由 ---
 @equipment_bp.route('/')
 def equipment_index():
     if 'user_id' not in session:
@@ -32,10 +30,10 @@ def get_equipment_list():
     if 'user_id' not in session:
         return jsonify({'code': 401, 'msg': '请先登录'})
 
-    # 【性能优化 1】：使用 joinedload 一次性查出设备对应的 registrar(录入人) 数据
+    # 加载设备及其录入人信息
     equipments = Equipment.query.options(joinedload(Equipment.registrar)).order_by(Equipment.created_at.desc()).all()
 
-    # 【性能优化 2】：一次性查出所有“正在借用”的记录，转为字典映射，避免在 for 循环中反复查库！
+    # 获取当前所有借用中的记录用于逾期判断
     active_borrows = BorrowRecord.query.filter_by(status='borrowing').all()
     borrow_map = {b.equipment_id: b for b in active_borrows}
 
@@ -48,16 +46,15 @@ def get_equipment_list():
         due_time_str = "N/A"
 
         if eq.status == 1:
-            # 直接从字典中获取，不再产生 SQL 查询
             active_record = borrow_map.get(eq.id)
             if active_record and active_record.due_time:
-                # 【时间修复】：转为北京时间 (UTC+8) 给前端展示
+                # 转为北京时间展示
                 due_time_beijing = active_record.due_time + timedelta(hours=8)
                 due_time_str = due_time_beijing.strftime('%Y-%m-%d %H:%M')
+                # 逾期判定
                 if now_utc > active_record.due_time:
                     is_overdue = True
 
-        # 【时间修复】：录入时间也转为北京时间展示
         created_at_beijing = eq.created_at + timedelta(hours=8)
 
         data.append({
@@ -75,7 +72,7 @@ def get_equipment_list():
     return jsonify({'code': 200, 'data': data})
 
 
-# --- 3. API: 新增设备 (包含时间风险审计) ---
+# --- 3. API: 新增设备 ---
 @equipment_bp.route('/api/add', methods=['POST'])
 @admin_required
 def add_equipment():
@@ -98,13 +95,12 @@ def add_equipment():
     )
     db.session.add(new_eq)
 
-    # 行为安全检测
     r_level, r_msg = check_operation_risk()
     new_log = SysLog(
         user_id=session['user_id'],
         action='录入设备',
         target=f"名称: {name}, S/N: {sn}",
-        ip_address=get_real_ip(),  # 【安全修复】：补全真实IP记录
+        ip_address=get_real_ip(),
         risk_level=r_level,
         risk_msg=r_msg
     )
@@ -113,7 +109,7 @@ def add_equipment():
     return jsonify({'code': 200, 'msg': '设备录入成功'})
 
 
-# --- 4. API: 修改设备信息 (包含时间风险审计) ---
+# --- 4. API: 修改设备基础信息 ---
 @equipment_bp.route('/api/update', methods=['POST'])
 @admin_required
 def update_equipment():
@@ -123,25 +119,62 @@ def update_equipment():
 
     eq.name = data.get('name', eq.name)
     eq.specification = data.get('specification', eq.specification)
-    if 'status' in data:
-        eq.status = data['status']
 
-    # 行为安全检测
     r_level, r_msg = check_operation_risk()
     update_log = SysLog(
         user_id=session['user_id'],
-        action='修改设备',
+        action='修改基本信息',
         target=f"S/N: {eq.serial_number}",
-        ip_address=get_real_ip(),  # 【安全修复】：补全真实IP记录
+        ip_address=get_real_ip(),
         risk_level=r_level,
         risk_msg=r_msg
     )
     db.session.add(update_log)
     db.session.commit()
-    return jsonify({'code': 200, 'msg': '设备信息已更新'})
+    return jsonify({'code': 200, 'msg': '设备基本信息已更新'})
 
 
-# --- 5. API: 租借设备 (包含时间风险审计) ---
+# --- 5. 【新增】API: 管理员强制变更设备状态 (维修/报废/下线) ---
+@equipment_bp.route('/api/admin/update_status', methods=['POST'])
+@admin_required
+def admin_update_status():
+    data = request.get_json()
+    eq_id = data.get('equipment_id')
+    new_status = data.get('status')  # 0-在库, 2-维修中, 3-报废
+    note = data.get('note', '未填写原因')
+
+    equipment = Equipment.query.get(eq_id)
+    if not equipment:
+        return jsonify({'code': 404, 'msg': '设备不存在'})
+
+    # 安全检查：借用中的设备不能直接改状态，必须先归还
+    if equipment.status == 1:
+        return jsonify({'code': 400, 'msg': '设备正在借用中，请先执行归还流程'})
+
+    status_names = {0: '在库', 2: '维修中', 3: '报废'}
+    old_status_name = status_names.get(equipment.status, '未知')
+    new_status_name = status_names.get(new_status, '未知')
+
+    # 更新状态
+    equipment.status = new_status
+
+    # 记录审计日志
+    r_level, r_msg = check_operation_risk()
+    log = SysLog(
+        user_id=session['user_id'],
+        action='手动变更状态',
+        target=f"设备:{equipment.name}(S/N:{equipment.serial_number}) 从[{old_status_name}]变更为[{new_status_name}]。原因:{note}",
+        ip_address=get_real_ip(),
+        risk_level=r_level,
+        risk_msg=r_msg
+    )
+    db.session.add(log)
+    db.session.commit()
+
+    return jsonify({'code': 200, 'msg': f'状态已更新为: {new_status_name}'})
+
+
+# --- 6. API: 租借设备 ---
 @equipment_bp.route('/api/borrow', methods=['POST'])
 def borrow_equipment():
     if 'user_id' not in session:
@@ -149,45 +182,53 @@ def borrow_equipment():
 
     data = request.get_json()
     eq_id = data.get('equipment_id')
-    borrow_days = data.get('days', 7)
-    equipment = Equipment.query.get(eq_id)
+    return_date_str = data.get('return_date')
 
+    if not return_date_str:
+        return jsonify({'code': 400, 'msg': '必须选择预计归还日期'})
+
+    equipment = Equipment.query.get(eq_id)
     if not equipment or equipment.status != 0:
-        return jsonify({'code': 400, 'msg': '设备当前不可借用'})
+        return jsonify({'code': 400, 'msg': '设备当前不可借用（可能已借出或在维修）'})
+
+    try:
+        due_date_obj = datetime.strptime(return_date_str, '%Y-%m-%d')
+        due_date_utc = due_date_obj.replace(hour=23, minute=59, second=59) - timedelta(hours=8)
+        if due_date_utc <= datetime.utcnow():
+            return jsonify({'code': 400, 'msg': '归还日期不能早于当前时间'})
+    except ValueError:
+        return jsonify({'code': 400, 'msg': '日期格式无效'})
 
     equipment.status = 1
     equipment.current_user_id = session['user_id']
     equipment.borrow_time = datetime.utcnow()
+    equipment.due_time = due_date_utc
 
-    due_date = equipment.borrow_time + timedelta(days=borrow_days)
     new_record = BorrowRecord(
         equipment_id=equipment.id,
         user_id=session['user_id'],
         status='borrowing',
         borrow_time=equipment.borrow_time,
-        due_time=due_date
+        due_time=due_date_utc
     )
     db.session.add(new_record)
 
-    # 行为安全检测
     r_level, r_msg = check_operation_risk()
     borrow_log = SysLog(
         user_id=session['user_id'],
         action='借用设备',
-        target=f"设备: {equipment.name}",
-        ip_address=get_real_ip(),  # 【安全修复】：补全真实IP记录
+        target=f"设备: {equipment.name}, 预计归还: {return_date_str}",
+        ip_address=get_real_ip(),
         risk_level=r_level,
         risk_msg=r_msg
     )
     db.session.add(borrow_log)
     db.session.commit()
 
-    # 提示时间也转为北京时间
-    due_date_beijing = due_date + timedelta(hours=8)
-    return jsonify({'code': 200, 'msg': f'借用成功，请于 {due_date_beijing.strftime("%Y-%m-%d")} 前归还'})
+    return jsonify({'code': 200, 'msg': f'借用成功，请于 {return_date_str} 前归还'})
 
 
-# --- 6. API: 归还设备 (进阶功能：包含时长异常判定) ---
+# --- 7. API: 归还设备 ---
 @equipment_bp.route('/api/return', methods=['POST'])
 def return_equipment():
     if 'user_id' not in session:
@@ -200,25 +241,18 @@ def return_equipment():
     if not equipment or equipment.status != 1:
         return jsonify({'code': 400, 'msg': '操作无效'})
 
-    # 【权限修复】：不再硬编码 role_id == 1，兼容了通过 role_name 验证的更优方式
     is_admin = session.get('role_id') == 1 or session.get('role_name') == 'admin'
     if equipment.current_user_id != session['user_id'] and not is_admin:
         return jsonify({'code': 403, 'msg': '无权归还他人借用的设备'})
-
-    # --- 【核心逻辑】：双重风险判定 ---
-    # 1. 检测操作时间风险 (是否凌晨操作)
-    risk1_lvl, risk1_msg = check_operation_risk()
-
-    # 2. 检测使用时长风险 (是否超长占用)
-    risk2_lvl, risk2_msg = check_borrow_duration_risk(equipment.borrow_time)
-
-    # 综合判定：取最高级别的风险
-    final_risk_lvl, final_risk_msg = get_combined_risk([(risk1_lvl, risk1_msg), (risk2_lvl, risk2_msg)])
 
     active_record = BorrowRecord.query.filter_by(
         equipment_id=equipment.id,
         status='borrowing'
     ).first()
+
+    risk1_lvl, risk1_msg = check_operation_risk()
+    risk2_lvl, risk2_msg = check_borrow_duration_risk(active_record)
+    final_risk_lvl, final_risk_msg = get_combined_risk([(risk1_lvl, risk1_msg), (risk2_lvl, risk2_msg)])
 
     if active_record:
         active_record.status = 'returned'
@@ -227,13 +261,13 @@ def return_equipment():
     equipment.status = 0
     equipment.current_user_id = None
     equipment.borrow_time = None
+    equipment.due_time = None
 
-    # 记录审计日志，带入综合风险判定
     return_log = SysLog(
         user_id=session['user_id'],
         action='归还设备',
         target=f"设备: {equipment.name}",
-        ip_address=get_real_ip(),  # 【安全修复】：补全真实IP记录
+        ip_address=get_real_ip(),
         risk_level=final_risk_lvl,
         risk_msg=final_risk_msg
     )

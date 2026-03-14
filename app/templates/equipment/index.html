@@ -10,6 +10,8 @@
             --bg-color: #f1f5f9;
             --text-main: #334155;
             --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --gray-color: #64748b;
         }
         body { font-family: 'PingFang SC', sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
@@ -24,6 +26,8 @@
         .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; display: inline-block; }
         .badge-0 { background: #dcfce7; color: #166534; } /* 在库 */
         .badge-1 { background: #e0f2fe; color: #0369a1; } /* 借出 */
+        .badge-2 { background: #fef3c7; color: #92400e; } /* 维修中 */
+        .badge-3 { background: #fee2e2; color: #991b1b; } /* 报废 */
         .badge-overdue { background: var(--danger-color); color: white; animation: pulse 2s infinite; } /* 逾期高亮 */
 
         @keyframes pulse {
@@ -34,8 +38,10 @@
         .btn { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; transition: 0.2s; font-weight: bold; }
         .btn-add { background: var(--primary-color); color: white; margin-bottom: 20px; }
         .btn-borrow { background: #3b82f6; color: white; }
-        .btn-return { background: #f59e0b; color: white; }
-        .btn-edit { background: #64748b; color: white; }
+        .btn-return { background: var(--warning-color); color: white; }
+        .btn-edit { background: var(--gray-color); color: white; }
+        .btn-status { background: #4b5563; color: white; } /* 状态管理按钮 */
+
         .btn:hover { opacity: 0.8; }
         .btn:disabled { background: #cbd5e1; cursor: not-allowed; }
 
@@ -44,7 +50,7 @@
         .modal-content { background: white; padding: 25px; border-radius: 12px; width: 450px; }
         .form-group { margin-bottom: 15px; }
         .form-group label { display: block; margin-bottom: 5px; font-size: 13px; font-weight: bold; }
-        input, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-family: inherit; }
+        input, textarea, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-family: inherit; }
     </style>
 </head>
 <body>
@@ -91,8 +97,52 @@
             <textarea id="eq_spec" rows="3" placeholder="如：12.1寸屏, 含血氧监测"></textarea>
         </div>
         <div style="text-align: right; margin-top: 20px;">
-            <button class="btn" style="background: #e2e8f0; color: #334155;" onclick="hideModal()">取消</button>
+            <button class="btn" style="background: #e2e8f0; color: #334155;" onclick="hideModal('eqModal')">取消</button>
             <button class="btn btn-add" id="submitBtn" onclick="saveEquipment()">确认提交</button>
+        </div>
+    </div>
+</div>
+
+<div id="borrowModal" class="modal">
+    <div class="modal-content">
+        <h3>确认借用设备</h3>
+        <p id="borrow_info" style="font-size: 14px; color: #64748b;"></p>
+        <input type="hidden" id="borrow_eq_id">
+        <div class="form-group">
+            <label>预计归还日期 *</label>
+            <input type="date" id="borrow_return_date">
+            <small style="color: #94a3b8;">请根据实际需求选择归还时限</small>
+        </div>
+        <div style="text-align: right; margin-top: 20px;">
+            <button class="btn" style="background: #e2e8f0; color: #334155;" onclick="hideModal('borrowModal')">取消</button>
+            <button class="btn btn-borrow" onclick="submitBorrow()">确认借用</button>
+        </div>
+    </div>
+</div>
+
+<div id="statusModal" class="modal">
+    <div class="modal-content">
+        <h3>设备状态强制管理</h3>
+        <p id="status_eq_info" style="font-size: 14px; color: #64748b;"></p>
+        <input type="hidden" id="status_eq_id">
+
+        <div class="form-group">
+            <label>目标状态 *</label>
+            <select id="target_status">
+                <option value="0">在库 (正常可用)</option>
+                <option value="2">维修中 (暂时下线)</option>
+                <option value="3">报废 (永久下线)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>变更原因/备注 *</label>
+            <textarea id="status_note" rows="2" placeholder="请详细说明原因，如：年度质控检查、硬件故障、超过使用年限等"></textarea>
+        </div>
+
+        <div style="text-align: right; margin-top: 20px;">
+            <button class="btn" style="background: #e2e8f0; color: #334155;" onclick="hideModal('statusModal')">取消</button>
+            <button class="btn btn-edit" onclick="submitStatusChange()">确认变更</button>
         </div>
     </div>
 </div>
@@ -102,7 +152,6 @@
     document.addEventListener('DOMContentLoaded', fetchEquipments);
 
     function fetchEquipments() {
-        // GET 请求无需 CSRF Token
         fetch('/equipment/api/list')
             .then(res => res.json())
             .then(res => {
@@ -113,7 +162,6 @@
     function renderTable(data) {
         const tbody = document.getElementById('equipmentTableBody');
         tbody.innerHTML = data.map(eq => {
-            // 逾期判定显示
             let statusHtml = `<span class="badge badge-${eq.status_code}">${eq.status_text}</span>`;
             if (eq.is_overdue) {
                 statusHtml = `<span class="badge badge-overdue">逾期 (应还: ${eq.due_time})</span>`;
@@ -131,11 +179,14 @@
                     <td>
                         <div style="display: flex; gap: 5px;">
                             ${eq.status_code === 0 ?
-                                `<button class="btn btn-borrow" onclick="handleBorrow(${eq.id})">立即借用</button>` :
-                                `<button class="btn btn-return" onclick="handleReturn(${eq.id})">归还</button>`
+                                `<button class="btn btn-borrow" onclick="showBorrowModal(${eq.id}, '${eq.name}')">立即借用</button>` : ''
+                            }
+                            ${eq.status_code === 1 ?
+                                `<button class="btn btn-return" onclick="handleReturn(${eq.id})">归还</button>` : ''
                             }
                             ${currentUserRole === 1 ?
-                                `<button class="btn btn-edit" onclick="showEditModal(${JSON.stringify(eq).replace(/"/g, '&quot;')})">编辑</button>` : ''
+                                `<button class="btn btn-edit" onclick="showEditModal(${JSON.stringify(eq).replace(/"/g, '&quot;')})">编辑</button>
+                                 <button class="btn btn-status" onclick="showStatusModal(${eq.id}, '${eq.name}', ${eq.status_code})">状态管理</button>` : ''
                             }
                         </div>
                     </td>
@@ -144,38 +195,85 @@
         }).join('');
     }
 
-    // 借用处理 (默认借用7天)
-    function handleBorrow(id) {
-        if(!confirm('确定借用该设备吗？默认借用期为7天。')) return;
-        handleAction(id, 'borrow', { days: 7 });
+    // --- 借用逻辑 ---
+    function showBorrowModal(id, name) {
+        document.getElementById('borrow_eq_id').value = id;
+        document.getElementById('borrow_info').innerText = `正在借用设备：${name}`;
+        const today = new Date().toISOString().split('T')[0];
+        const dateInput = document.getElementById('borrow_return_date');
+        dateInput.setAttribute('min', today);
+        dateInput.value = "";
+        document.getElementById('borrowModal').style.display = 'flex';
     }
 
-    // 归还处理
-    function handleReturn(id) {
-        handleAction(id, 'return');
-    }
+    function submitBorrow() {
+        const id = document.getElementById('borrow_eq_id').value;
+        const returnDate = document.getElementById('borrow_return_date').value;
+        if(!returnDate) { alert("请选择预计归还日期"); return; }
 
-    // 统一的设备操作请求 (借用/归还)
-    function handleAction(id, action, extraData = {}) {
-        // 【核心修复】：获取 CSRF Token
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-
-        fetch(`/equipment/api/${action}`, {
+        fetch(`/equipment/api/borrow`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken  // 【核心修复】：携带 Token 发送请求
-            },
-            body: JSON.stringify({ equipment_id: id, ...extraData })
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ equipment_id: id, return_date: returnDate })
         })
         .then(res => res.json())
         .then(res => {
             alert(res.msg);
+            if(res.code === 200) { hideModal('borrowModal'); fetchEquipments(); }
+        });
+    }
+
+    // --- 强制状态管理 (管理员专用) ---
+    function showStatusModal(id, name, currentStatus) {
+        if (currentStatus === 1) {
+            alert("设备正在借用中，请先由借用人归还后再调整状态。");
+            return;
+        }
+        document.getElementById('status_eq_id').value = id;
+        document.getElementById('status_eq_info').innerText = `当前管理设备：${name}`;
+        document.getElementById('target_status').value = currentStatus;
+        document.getElementById('status_note').value = "";
+        document.getElementById('statusModal').style.display = 'flex';
+    }
+
+    function submitStatusChange() {
+        const id = document.getElementById('status_eq_id').value;
+        const status = parseInt(document.getElementById('target_status').value);
+        const note = document.getElementById('status_note').value;
+        if(!note) { alert("请输入变更原因备注"); return; }
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        fetch('/equipment/api/admin/update_status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ equipment_id: id, status: status, note: note })
+        })
+        .then(res => res.json())
+        .then(res => {
+            alert(res.msg);
+            if(res.code === 200) { hideModal('statusModal'); fetchEquipments(); }
+        });
+    }
+
+    // --- 归还处理 ---
+    function handleReturn(id) {
+        if(!confirm('确定归还该设备吗？')) return;
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        fetch(`/equipment/api/return`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ equipment_id: id })
+        })
+        .then(res => res.json())
+        .then(res => {
+            if (res.risk_warning) alert("归还成功，风险预警：" + res.risk_warning);
+            else alert(res.msg);
             fetchEquipments();
         });
     }
 
-    // 弹窗逻辑
+    // --- 基础弹窗逻辑 ---
     function showAddModal() {
         resetForm();
         document.getElementById('modalTitle').innerText = '录入新设备';
@@ -188,12 +286,12 @@
         document.getElementById('edit_id').value = eq.id;
         document.getElementById('eq_name').value = eq.name;
         document.getElementById('eq_sn').value = eq.serial_number;
-        document.getElementById('eq_sn').disabled = true; // 序列号通常不可改
+        document.getElementById('eq_sn').disabled = true;
         document.getElementById('eq_spec').value = eq.specification;
         document.getElementById('eqModal').style.display = 'flex';
     }
 
-    function hideModal() { document.getElementById('eqModal').style.display = 'none'; }
+    function hideModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
 
     function resetForm() {
         document.getElementById('edit_id').value = '';
@@ -203,7 +301,6 @@
         document.getElementById('eq_spec').value = '';
     }
 
-    // 提交设备数据 (新增/更新)
     function saveEquipment() {
         const id = document.getElementById('edit_id').value;
         const url = id ? '/equipment/api/update' : '/equipment/api/add';
@@ -214,24 +311,16 @@
         };
         if (id) data.id = id;
 
-        // 【核心修复】：获取 CSRF Token
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-
         fetch(url, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken // 【核心修复】：携带 Token 发送请求
-            },
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
             body: JSON.stringify(data)
         })
         .then(res => res.json())
         .then(res => {
             alert(res.msg);
-            if(res.code === 200) {
-                hideModal();
-                fetchEquipments();
-            }
+            if(res.code === 200) { hideModal('eqModal'); fetchEquipments(); }
         });
     }
 </script>
