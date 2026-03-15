@@ -17,6 +17,14 @@
         .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 
+        /* 提醒消息样式 */
+        #reminder-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+        .alert-toast { padding: 15px 20px; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-left: 5px solid; min-width: 300px; max-width: 400px; position: relative; animation: slideIn 0.4s ease-out; font-size: 14px; line-height: 1.5; }
+        .alert-warning { background: #fffbeb; border-left-color: var(--warning-color); color: #92400e; }
+        .alert-danger { background: #fef2f2; border-left-color: var(--danger-color); color: #991b1b; }
+        .close-alert { position: absolute; top: 5px; right: 10px; cursor: pointer; font-size: 18px; opacity: 0.5; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
         /* 表格样式 */
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
@@ -28,11 +36,9 @@
         .badge-1 { background: #e0f2fe; color: #0369a1; } /* 借出 */
         .badge-2 { background: #fef3c7; color: #92400e; } /* 维修中 */
         .badge-3 { background: #fee2e2; color: #991b1b; } /* 报废 */
-        .badge-overdue { background: var(--danger-color); color: white; animation: pulse 2s infinite; } /* 逾期高亮 */
+        .badge-overdue { background: var(--danger-color); color: white; animation: pulse 2s infinite; }
 
-        @keyframes pulse {
-            0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; }
-        }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
 
         /* 按钮样式 */
         .btn { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; transition: 0.2s; font-weight: bold; }
@@ -40,7 +46,7 @@
         .btn-borrow { background: #3b82f6; color: white; }
         .btn-return { background: var(--warning-color); color: white; }
         .btn-edit { background: var(--gray-color); color: white; }
-        .btn-status { background: #4b5563; color: white; } /* 状态管理按钮 */
+        .btn-status { background: #4b5563; color: white; }
 
         .btn:hover { opacity: 0.8; }
         .btn:disabled { background: #cbd5e1; cursor: not-allowed; }
@@ -54,6 +60,8 @@
     </style>
 </head>
 <body>
+
+<div id="reminder-container"></div>
 
 <div class="container">
     <div class="header">
@@ -125,7 +133,6 @@
         <h3>设备状态强制管理</h3>
         <p id="status_eq_info" style="font-size: 14px; color: #64748b;"></p>
         <input type="hidden" id="status_eq_id">
-
         <div class="form-group">
             <label>目标状态 *</label>
             <select id="target_status">
@@ -134,12 +141,10 @@
                 <option value="3">报废 (永久下线)</option>
             </select>
         </div>
-
         <div class="form-group">
             <label>变更原因/备注 *</label>
-            <textarea id="status_note" rows="2" placeholder="请详细说明原因，如：年度质控检查、硬件故障、超过使用年限等"></textarea>
+            <textarea id="status_note" rows="2" placeholder="原因说明..."></textarea>
         </div>
-
         <div style="text-align: right; margin-top: 20px;">
             <button class="btn" style="background: #e2e8f0; color: #334155;" onclick="hideModal('statusModal')">取消</button>
             <button class="btn btn-edit" onclick="submitStatusChange()">确认变更</button>
@@ -149,7 +154,40 @@
 
 <script>
     const currentUserRole = {{ role_id | default(0) }};
-    document.addEventListener('DOMContentLoaded', fetchEquipments);
+
+    // XSS 防护：简单的字符转义函数
+    function escapeHtml(text) {
+        if (!text) return '';
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchEquipments();
+        checkBorrowReminders(); // 页面加载后立即检查归还提醒
+    });
+
+    // --- 提醒功能接口联动 ---
+    function checkBorrowReminders() {
+        fetch('/equipment/api/reminders')
+            .then(res => res.json())
+            .then(res => {
+                if(res.code === 200 && res.data.length > 0) {
+                    const container = document.getElementById('reminder-container');
+                    res.data.forEach(item => {
+                        const alertDiv = document.createElement('div');
+                        alertDiv.className = `alert-toast alert-${item.type}`;
+                        alertDiv.innerHTML = `
+                            <span>${escapeHtml(item.msg)}</span>
+                            <span class="close-alert" onclick="this.parentElement.remove()">&times;</span>
+                        `;
+                        container.appendChild(alertDiv);
+                        // 10秒后自动消失
+                        setTimeout(() => alertDiv.remove(), 10000);
+                    });
+                }
+            });
+    }
 
     function fetchEquipments() {
         fetch('/equipment/api/list')
@@ -162,7 +200,7 @@
     function renderTable(data) {
         const tbody = document.getElementById('equipmentTableBody');
         tbody.innerHTML = data.map(eq => {
-            let statusHtml = `<span class="badge badge-${eq.status_code}">${eq.status_text}</span>`;
+            let statusHtml = `<span class="badge badge-${eq.status_code}">${escapeHtml(eq.status_text)}</span>`;
             if (eq.is_overdue) {
                 statusHtml = `<span class="badge badge-overdue">逾期 (应还: ${eq.due_time})</span>`;
             } else if (eq.status_code === 1) {
@@ -171,22 +209,22 @@
 
             return `
                 <tr>
-                    <td><strong>${eq.name}</strong></td>
-                    <td><code>${eq.serial_number}</code></td>
-                    <td><small>${eq.specification || '暂无说明'}</small></td>
+                    <td><strong>${escapeHtml(eq.name)}</strong></td>
+                    <td><code>${escapeHtml(eq.serial_number)}</code></td>
+                    <td><small>${escapeHtml(eq.specification) || '暂无说明'}</small></td>
                     <td>${statusHtml}</td>
-                    <td>${eq.added_by}</td>
+                    <td>${escapeHtml(eq.added_by)}</td>
                     <td>
                         <div style="display: flex; gap: 5px;">
                             ${eq.status_code === 0 ?
-                                `<button class="btn btn-borrow" onclick="showBorrowModal(${eq.id}, '${eq.name}')">立即借用</button>` : ''
+                                `<button class="btn btn-borrow" onclick="showBorrowModal(${eq.id}, '${escapeHtml(eq.name)}')">立即借用</button>` : ''
                             }
                             ${eq.status_code === 1 ?
                                 `<button class="btn btn-return" onclick="handleReturn(${eq.id})">归还</button>` : ''
                             }
                             ${currentUserRole === 1 ?
-                                `<button class="btn btn-edit" onclick="showEditModal(${JSON.stringify(eq).replace(/"/g, '&quot;')})">编辑</button>
-                                 <button class="btn btn-status" onclick="showStatusModal(${eq.id}, '${eq.name}', ${eq.status_code})">状态管理</button>` : ''
+                                `<button class="btn btn-edit" onclick='showEditModal(${JSON.stringify(eq).replace(/'/g, "&apos;")})'>编辑</button>
+                                 <button class="btn btn-status" onclick="showStatusModal(${eq.id}, '${escapeHtml(eq.name)}', ${eq.status_code})">状态管理</button>` : ''
                             }
                         </div>
                     </td>
@@ -200,9 +238,7 @@
         document.getElementById('borrow_eq_id').value = id;
         document.getElementById('borrow_info').innerText = `正在借用设备：${name}`;
         const today = new Date().toISOString().split('T')[0];
-        const dateInput = document.getElementById('borrow_return_date');
-        dateInput.setAttribute('min', today);
-        dateInput.value = "";
+        document.getElementById('borrow_return_date').setAttribute('min', today);
         document.getElementById('borrowModal').style.display = 'flex';
     }
 
@@ -224,39 +260,7 @@
         });
     }
 
-    // --- 强制状态管理 (管理员专用) ---
-    function showStatusModal(id, name, currentStatus) {
-        if (currentStatus === 1) {
-            alert("设备正在借用中，请先由借用人归还后再调整状态。");
-            return;
-        }
-        document.getElementById('status_eq_id').value = id;
-        document.getElementById('status_eq_info').innerText = `当前管理设备：${name}`;
-        document.getElementById('target_status').value = currentStatus;
-        document.getElementById('status_note').value = "";
-        document.getElementById('statusModal').style.display = 'flex';
-    }
-
-    function submitStatusChange() {
-        const id = document.getElementById('status_eq_id').value;
-        const status = parseInt(document.getElementById('target_status').value);
-        const note = document.getElementById('status_note').value;
-        if(!note) { alert("请输入变更原因备注"); return; }
-
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        fetch('/equipment/api/admin/update_status', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-            body: JSON.stringify({ equipment_id: id, status: status, note: note })
-        })
-        .then(res => res.json())
-        .then(res => {
-            alert(res.msg);
-            if(res.code === 200) { hideModal('statusModal'); fetchEquipments(); }
-        });
-    }
-
-    // --- 归还处理 ---
+    // --- 归还处理 (含风险预警拦截) ---
     function handleReturn(id) {
         if(!confirm('确定归还该设备吗？')) return;
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
@@ -267,61 +271,58 @@
         })
         .then(res => res.json())
         .then(res => {
-            if (res.risk_warning) alert("归还成功，风险预警：" + res.risk_warning);
-            else alert(res.msg);
+            if (res.risk_warning) {
+                // 如果后端返回了风险预警消息，进行高亮弹窗提醒
+                alert("⚠️ 归还成功，但触发安全审计警告：\n" + res.risk_warning);
+            } else {
+                alert(res.msg);
+            }
             fetchEquipments();
         });
     }
 
-    // --- 基础弹窗逻辑 ---
-    function showAddModal() {
-        resetForm();
-        document.getElementById('modalTitle').innerText = '录入新设备';
-        document.getElementById('eqModal').style.display = 'flex';
+    // --- 状态管理 ---
+    function showStatusModal(id, name, currentStatus) {
+        document.getElementById('status_eq_id').value = id;
+        document.getElementById('status_eq_info').innerText = `管理设备：${name}`;
+        document.getElementById('target_status').value = currentStatus;
+        document.getElementById('statusModal').style.display = 'flex';
     }
 
-    function showEditModal(eq) {
-        resetForm();
-        document.getElementById('modalTitle').innerText = '编辑设备信息';
-        document.getElementById('edit_id').value = eq.id;
-        document.getElementById('eq_name').value = eq.name;
-        document.getElementById('eq_sn').value = eq.serial_number;
-        document.getElementById('eq_sn').disabled = true;
-        document.getElementById('eq_spec').value = eq.specification;
-        document.getElementById('eqModal').style.display = 'flex';
-    }
-
-    function hideModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
-
-    function resetForm() {
-        document.getElementById('edit_id').value = '';
-        document.getElementById('eq_name').value = '';
-        document.getElementById('eq_sn').value = '';
-        document.getElementById('eq_sn').disabled = false;
-        document.getElementById('eq_spec').value = '';
-    }
-
-    function saveEquipment() {
-        const id = document.getElementById('edit_id').value;
-        const url = id ? '/equipment/api/update' : '/equipment/api/add';
-        const data = {
-            name: document.getElementById('eq_name').value,
-            serial_number: document.getElementById('eq_sn').value,
-            specification: document.getElementById('eq_spec').value
-        };
-        if (id) data.id = id;
+    function submitStatusChange() {
+        const id = document.getElementById('status_eq_id').value;
+        const note = document.getElementById('status_note').value;
+        if(!note) { alert("请输入备注"); return; }
 
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        fetch(url, {
+        fetch('/equipment/api/admin/update_status', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-            body: JSON.stringify(data)
+            body: JSON.stringify({ equipment_id: id, status: parseInt(document.getElementById('target_status').value), note: note })
         })
         .then(res => res.json())
         .then(res => {
             alert(res.msg);
-            if(res.code === 200) { hideModal('eqModal'); fetchEquipments(); }
+            if(res.code === 200) { hideModal('statusModal'); fetchEquipments(); }
         });
+    }
+
+    // --- 弹窗基础逻辑 ---
+    function showAddModal() { resetForm(); document.getElementById('modalTitle').innerText = '录入新设备'; document.getElementById('eqModal').style.display = 'flex'; }
+    function showEditModal(eq) { resetForm(); document.getElementById('modalTitle').innerText = '编辑设备信息'; document.getElementById('edit_id').value = eq.id; document.getElementById('eq_name').value = eq.name; document.getElementById('eq_sn').value = eq.serial_number; document.getElementById('eq_sn').disabled = true; document.getElementById('eq_spec').value = eq.specification; document.getElementById('eqModal').style.display = 'flex'; }
+    function hideModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+    function resetForm() { document.getElementById('edit_id').value = ''; document.getElementById('eq_name').value = ''; document.getElementById('eq_sn').value = ''; document.getElementById('eq_sn').disabled = false; document.getElementById('eq_spec').value = ''; }
+
+    function saveEquipment() {
+        const id = document.getElementById('edit_id').value;
+        const url = id ? '/equipment/api/update' : '/equipment/api/add';
+        const data = { name: document.getElementById('eq_name').value, serial_number: document.getElementById('eq_sn').value, specification: document.getElementById('eq_spec').value };
+        if (id) data.id = id;
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }, body: JSON.stringify(data) })
+        .then(res => res.json())
+        .then(res => { alert(res.msg); if(res.code === 200) { hideModal('eqModal'); fetchEquipments(); } });
     }
 </script>
 </body>

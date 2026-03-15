@@ -5,7 +5,8 @@ from app.models.equipment import Equipment, BorrowRecord
 from app.models.log import SysLog
 from app.utils.decorators import admin_required
 from datetime import datetime, timedelta
-from app.utils.security import check_operation_risk, check_borrow_duration_risk, get_combined_risk
+# 去掉了需要你在 security.py 中额外手写的方法，直接保留核心的 check_operation_risk 即可
+from app.utils.security import check_operation_risk
 from sqlalchemy.orm import joinedload
 
 equipment_bp = Blueprint('equipment', __name__, url_prefix='/equipment')
@@ -134,7 +135,7 @@ def update_equipment():
     return jsonify({'code': 200, 'msg': '设备基本信息已更新'})
 
 
-# --- 5. 【新增】API: 管理员强制变更设备状态 (维修/报废/下线) ---
+# --- 5. API: 管理员强制变更设备状态 (维修/报废/下线) ---
 @equipment_bp.route('/api/admin/update_status', methods=['POST'])
 @admin_required
 def admin_update_status():
@@ -228,7 +229,7 @@ def borrow_equipment():
     return jsonify({'code': 200, 'msg': f'借用成功，请于 {return_date_str} 前归还'})
 
 
-# --- 7. API: 归还设备 ---
+# --- 7. API: 归还设备 (融合行为安全审计) ---
 @equipment_bp.route('/api/return', methods=['POST'])
 def return_equipment():
     if 'user_id' not in session:
@@ -250,19 +251,40 @@ def return_equipment():
         status='borrowing'
     ).first()
 
-    risk1_lvl, risk1_msg = check_operation_risk()
-    risk2_lvl, risk2_msg = check_borrow_duration_risk(active_record)
-    final_risk_lvl, final_risk_msg = get_combined_risk([(risk1_lvl, risk1_msg), (risk2_lvl, risk2_msg)])
+    # ================= 核心行为安全与日志审计合并 =================
+    final_risk_lvl = 0
+    final_risk_msg = "正常归还"
+
+    # 1. 检查是否存在非工作时间操作 (获取你之前写好的判定)
+    time_risk_lvl, time_risk_msg = check_operation_risk()
+    if time_risk_lvl > 0:
+        final_risk_lvl = time_risk_lvl
+        final_risk_msg = time_risk_msg
 
     if active_record:
+        # 2. 检查使用时长是否异常超界 (例如：借用超过 30 天)
+        borrow_duration = datetime.utcnow() - active_record.borrow_time
+        duration_days = borrow_duration.days
+
+        if duration_days > 30:
+            final_risk_lvl = 2  # 强制设置为最高风险(红色报警)
+            if time_risk_lvl > 0:
+                final_risk_msg = f"双重高危异常：设备被长期占用长达 {duration_days} 天，且 {time_risk_msg}"
+            else:
+                final_risk_msg = f"异常行为：该设备被长期超期占用，长达 {duration_days} 天"
+
+        # 3. 结算并更新借还记录状态
         active_record.status = 'returned'
         active_record.return_time = datetime.utcnow()
+    # ==============================================================
 
+    # 重置设备基础表状态
     equipment.status = 0
     equipment.current_user_id = None
     equipment.borrow_time = None
     equipment.due_time = None
 
+    # 生成安全审计日志
     return_log = SysLog(
         user_id=session['user_id'],
         action='归还设备',
@@ -277,5 +299,49 @@ def return_equipment():
     return jsonify({
         'code': 200,
         'msg': '归还成功',
+        # 将报警信息返回给前端，前端可根据是否存在 risk_warning 决定是否弹出严重警告框
         'risk_warning': final_risk_msg if final_risk_lvl > 0 else None
     })
+
+
+# --- 8. 【新增】API: 临期及逾期提醒 ---
+@equipment_bp.route('/api/reminders', methods=['GET'])
+def get_due_reminders():
+    """获取当前用户的临近归还提醒 (仅剩 24 小时以内) 及逾期提醒"""
+    if 'user_id' not in session:
+        return jsonify({'code': 401, 'msg': '未登录'})
+
+    user_id = session['user_id']
+    now_utc = datetime.utcnow()
+
+    # 获取该用户当前借用中的所有记录
+    active_records = BorrowRecord.query.options(joinedload(BorrowRecord.equipment)).filter_by(
+        user_id=user_id,
+        status='borrowing'
+    ).all()
+
+    reminders = []
+    for record in active_records:
+        if not record.due_time:
+            continue
+
+        # 计算距离归还时间的剩余秒数
+        time_diff = record.due_time - now_utc
+        remaining_seconds = time_diff.total_seconds()
+
+        # 逻辑1：不足 24 小时 (86400秒)，且还没逾期 (>0)
+        if 0 < remaining_seconds <= 86400:
+            hours_left = int(remaining_seconds // 3600)
+            reminders.append({
+                'type': 'warning',
+                'msg': f"⏱️ 临期提醒：您借用的【{record.equipment.name}】(编号:{record.equipment.serial_number}) 距离归还期限仅剩 {hours_left} 小时，请合理安排时间并按时归还。"
+            })
+        # 逻辑2：已经逾期的情况，给以更严重的警告
+        elif remaining_seconds <= 0:
+            overdue_days = abs(int(remaining_seconds // 86400))
+            reminders.append({
+                'type': 'danger',
+                'msg': f"🚨 逾期警告：您借用的【{record.equipment.name}】已逾期 {overdue_days} 天！请立即归还，以免触发系统风控记录。"
+            })
+
+    return jsonify({'code': 200, 'data': reminders})

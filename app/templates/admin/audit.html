@@ -5,7 +5,7 @@
     <title>系统审计日志 - 医疗设备管理系统</title>
     <style>
         :root {
-            --primary-color: #059669;
+            --primary-color: #059669; /* 医疗绿 */
             --bg-color: #f1f5f9;
             --text-main: #334155;
             --border-color: #e2e8f0;
@@ -42,14 +42,21 @@
         .row-warning { background-color: var(--warning-bg) !important; color: var(--warning-text); }
         .row-danger { background-color: var(--danger-bg) !important; color: var(--danger-text); font-weight: bold; }
 
-        .risk-badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-left: 5px; }
+        /* 状态与风险标签 */
+        .risk-badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-left: 5px; font-weight: bold; }
         .badge-1 { background: #fb923c; color: white; }
         .badge-2 { background: #ef4444; color: white; }
 
         .status-badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-        .status-borrowing { background: #fee2e2; color: #991b1b; }
-        .status-returned { background: #dcfce7; color: #166534; }
-        .action-log { color: #0369a1; font-weight: bold; }
+        .status-safe { background: #dcfce7; color: #166534; }    /* 安全/正常 */
+        .status-warning { background: #ffedd5; color: #9a3412; } /* 中风险 */
+        .status-danger { background: #fee2e2; color: #991b1b; }  /* 高风险 */
+
+        /* 动作文字颜色 */
+        .action-safe { color: var(--primary-color); font-weight: bold; }
+        .action-warn { color: #c2410c; font-weight: bold; }
+        .action-danger { color: #b91c1c; font-weight: bold; }
+
         small.risk-desc { display: block; color: #ef4444; margin-top: 4px; font-style: italic; }
     </style>
 </head>
@@ -63,15 +70,15 @@
 
     <div class="filter-bar">
         <div class="filter-group">
-            <label>操作人 ID</label>
-            <input type="text" id="filter_user_id" placeholder="输入用户ID">
+            <label>操作人账号</label>
+            <input type="text" id="filter_user_id" placeholder="输入账号(如 admin)">
         </div>
         <div class="filter-group">
             <label>起始日期</label>
             <input type="date" id="filter_date">
         </div>
         <div class="filter-group" id="risk_filter_group" style="display:none;">
-            <label>风险等级</label>
+            <label>风险等级筛选</label>
             <select id="filter_risk_level">
                 <option value="">全部记录</option>
                 <option value="0">正常记录</option>
@@ -84,7 +91,7 @@
 
     <div class="tabs">
         <div class="tab active" id="tab_borrow" onclick="switchTab('borrow')">设备借还流水</div>
-        <div class="tab" id="tab_sys" onclick="switchTab('sys')">系统操作日志</div>
+        <div class="tab" id="tab_sys" onclick="switchTab('sys')">系统审计日志</div>
     </div>
 
     <div class="table-container">
@@ -98,16 +105,20 @@
 <script>
     let currentTab = 'borrow';
 
+    // XSS 防护：HTML 转义函数
+    function escapeHtml(text) {
+        if (!text) return '';
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+
     document.addEventListener('DOMContentLoaded', loadData);
 
     function switchTab(tab) {
         currentTab = tab;
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.getElementById(`tab_${tab}`).classList.add('active');
-
-        // 只有系统日志页签显示风险筛选
         document.getElementById('risk_filter_group').style.display = (tab === 'sys' ? 'flex' : 'none');
-
         loadData();
     }
 
@@ -126,19 +137,15 @@
     function fetchBorrowLogs() {
         fetch('/admin/api/audit/list')
             .then(res => res.json())
-            .then(res => {
-                if(res.code === 200) renderBorrowTable(res.data);
-            });
+            .then(res => { if(res.code === 200) renderBorrowTable(res.data); });
     }
 
     function fetchSysLogs(userId, date, riskLevel) {
-        // 【新增】：带上 risk_level 参数
+        // 使用之前的后端优化接口：支持 username 搜索及风险过滤
         let url = `/admin/api/sys_logs/list?user_id=${userId}&start_date=${date}&risk_level=${riskLevel}`;
         fetch(url)
             .then(res => res.json())
-            .then(res => {
-                if(res.code === 200) renderSysTable(res.data);
-            });
+            .then(res => { if(res.code === 200) renderSysTable(res.data); });
     }
 
     function renderBorrowTable(data) {
@@ -150,24 +157,24 @@
                 <th>记录ID</th>
                 <th>设备名称</th>
                 <th>借用人</th>
-                <th>科室</th>
+                <th>所属科室</th>
                 <th>借出时间</th>
                 <th>归还时间</th>
-                <th>状态</th>
+                <th>当前状态</th>
             </tr>
         `;
 
         body.innerHTML = data.map(log => `
             <tr>
                 <td>#${log.id}</td>
-                <td><strong>${log.equipment_name}</strong><br><small>${log.serial_number}</small></td>
-                <td>${log.user_name}</td>
-                <td>${log.department}</td>
+                <td><strong>${escapeHtml(log.equipment_name)}</strong><br><small>${escapeHtml(log.serial_number)}</small></td>
+                <td>${escapeHtml(log.user_name)}</td>
+                <td>${escapeHtml(log.department)}</td>
                 <td>${log.borrow_time}</td>
                 <td>${log.return_time || '--'}</td>
                 <td>
-                    <span class="status-badge ${log.status === '借用中' ? 'status-borrowing' : 'status-returned'}">
-                        ${log.status}
+                    <span class="status-badge ${log.status === '借用中' ? 'status-danger' : 'status-safe'}">
+                        ${escapeHtml(log.status)}
                     </span>
                 </td>
             </tr>
@@ -182,38 +189,44 @@
             <tr>
                 <th>日志ID</th>
                 <th>操作时间</th>
-                <th>操作人</th>
-                <th>动作</th>
-                <th>操作对象/备注</th>
+                <th>操作账号</th>
+                <th>动作行为</th>
+                <th>操作目标/备注</th>
                 <th>风险判定</th>
-                <th>IP地址</th>
+                <th>终端IP</th>
             </tr>
         `;
 
         body.innerHTML = data.map(log => {
-            // 根据风险等级决定 CSS 类
             let rowClass = '';
             let riskBadge = '';
+            let actionClass = 'action-safe';
+            let riskStatusLabel = '<span class="status-badge status-safe">🛡️ 安全</span>';
+
             if (log.risk_level === 1) {
                 rowClass = 'row-warning';
+                actionClass = 'action-warn';
                 riskBadge = '<span class="risk-badge badge-1">异常时间</span>';
+                riskStatusLabel = '<span class="status-badge status-warning">中风险</span>';
             } else if (log.risk_level === 2) {
                 rowClass = 'row-danger';
-                riskBadge = '<span class="risk-badge badge-2">严重预警</span>';
+                actionClass = 'action-danger';
+                riskBadge = '<span class="risk-badge badge-2">高危行为</span>';
+                riskStatusLabel = '<span class="status-badge status-danger">高风险</span>';
             }
 
             return `
                 <tr class="${rowClass}">
                     <td>#${log.id}</td>
                     <td>${log.time}</td>
-                    <td>${log.operator}</td>
-                    <td><span class="action-log">${log.action}</span>${riskBadge}</td>
+                    <td><strong>${escapeHtml(log.operator)}</strong></td>
+                    <td><span class="${actionClass}">${escapeHtml(log.action)}</span>${riskBadge}</td>
                     <td>
-                        ${log.target || '--'}
-                        ${log.risk_msg ? `<small class="risk-desc">⚠️ ${log.risk_msg}</small>` : ''}
+                        ${escapeHtml(log.target) || '--'}
+                        ${log.risk_msg ? `<small class="risk-desc">⚠️ ${escapeHtml(log.risk_msg)}</small>` : ''}
                     </td>
-                    <td>${log.risk_level === 0 ? '正常' : '<strong>存在风险</strong>'}</td>
-                    <td><code>${log.ip || 'Local'}</code></td>
+                    <td>${riskStatusLabel}</td>
+                    <td><code>${escapeHtml(log.ip) || 'Local'}</code></td>
                 </tr>
             `;
         }).join('');

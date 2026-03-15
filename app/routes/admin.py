@@ -166,17 +166,22 @@ def get_borrow_logs():
 @admin_bp.route('/api/sys_logs/list', methods=['GET'])
 @admin_required
 def get_sys_logs():
-    operator_id = request.args.get('user_id')
+    # 此时前端传来的 user_id 实际上是你期望的字符串（例如：'admin'）
+    operator_username = request.args.get('user_id')
     start_date = request.args.get('start_date')
     risk_level = request.args.get('risk_level')
 
-    # 【性能优化】：预先联合查询 operator (User 表)，解决原来列表推导式引发的数据库性能崩塌
-    query = SysLog.query.options(joinedload(SysLog.operator))
+    # 【核心修复】：加上 outerjoin 连接 User 表，以支持后续基于 username 的查询过滤
+    query = SysLog.query.outerjoin(User, SysLog.user_id == User.id).options(joinedload(SysLog.operator))
 
-    if operator_id:
-        query = query.filter_by(user_id=operator_id)
+    # 【方案1修改】：支持通过前端传来的注册账号 (username) 进行精确查询
+    if operator_username:
+        # 这里不再验证 isdigit()，直接将其作为字符串去匹配 User 表的 username 字段
+        query = query.filter(User.username == operator_username)
+
     if risk_level and risk_level.isdigit():
-        query = query.filter_by(risk_level=int(risk_level))
+        query = query.filter(SysLog.risk_level == int(risk_level))
+
     if start_date:
         try:
             dt = datetime.strptime(start_date, '%Y-%m-%d')
@@ -188,7 +193,8 @@ def get_sys_logs():
 
     data = [{
         'id': l.id,
-        'operator': l.operator.real_name if l.operator else '系统/匿名',
+        # 【方案1修改】：此处替换为 username，让前端表格显示注册账号而不是真实姓名
+        'operator': l.operator.username if l.operator else '系统/匿名',
         'action': l.action,
         'target': l.target,
         'ip': l.ip_address,
