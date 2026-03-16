@@ -1,0 +1,120 @@
+{% extends "base.html" %} 
+
+{% block title %}管理员数据面板{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">📊 系统数据大屏</h2>
+
+    <div class="row mb-4 text-center">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">总设备数</h5>
+                    <h2 id="card-total-equip">0</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">系统总用户</h5>
+                    <h2 id="card-total-users">0</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">待审核用户</h5>
+                    <h2 id="card-pending-users">0</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-danger mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">风险操作拦截</h5>
+                    <h2 id="card-high-risk">0</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">设备状态分布</div>
+                <div class="card-body">
+                    <div id="statusPieChart" style="width: 100%; height: 400px;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">近7天系统活跃度预留</div>
+                <div class="card-body">
+                    <div id="trendBarChart" style="width: 100%; height: 400px;">
+                        <p class="text-muted text-center mt-5">暂无数据/功能开发中...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化 ECharts 实例
+    var pieChart = echarts.init(document.getElementById('statusPieChart'));
+
+    // 请求后端 API 获取数据
+    axios.get("{{ url_for('admin.get_statistics_data') }}")
+        .then(function (response) {
+            if (response.data.code === 200) {
+                const data = response.data.data;
+                
+                // 1. 填充顶部卡片数据
+                document.getElementById('card-total-equip').innerText = data.cards.total_equip;
+                document.getElementById('card-total-users').innerText = data.cards.total_users;
+                document.getElementById('card-pending-users').innerText = data.cards.pending_users;
+                document.getElementById('card-high-risk').innerText = data.cards.high_risk_logs;
+
+                // 2. 渲染饼图
+                var pieOption = {
+                    tooltip: { trigger: 'item' },
+                    legend: { top: '5%', left: 'center' },
+                    color: ['#28a745', '#007bff', '#ffc107', '#dc3545'], // 对应：在库绿、借出蓝、维修黄、报废红
+                    series: [
+                        {
+                            name: '设备状态',
+                            type: 'pie',
+                            radius: ['40%', '70%'],
+                            avoidLabelOverlap: false,
+                            itemStyle: {
+                                borderRadius: 10,
+                                borderColor: '#fff',
+                                borderWidth: 2
+                            },
+                            label: { show: false, position: 'center' },
+                            emphasis: {
+                                label: { show: true, fontSize: 20, fontWeight: 'bold' }
+                            },
+                            labelLine: { show: false },
+                            data: data.equipment_status
+                        }
+                    ]
+                };
+                pieChart.setOption(pieOption);
+            }
+        })
+        .catch(function (error) {
+            console.error("获取统计数据失败:", error);
+        });
+});
+</script>
+{% endblock %}

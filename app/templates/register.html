@@ -31,7 +31,7 @@
             border-radius: 20px;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
             width: 100%;
-            max-width: 450px;
+            max-width: 480px; /* 稍微加宽一点以适应两列排版 */
         }
         h2 { text-align: center; color: var(--primary-color); margin-bottom: 24px; }
         .form-row {
@@ -93,9 +93,18 @@
             </select>
         </div>
 
-        <div class="form-group">
-            <label>联系电话 (选填)</label>
-            <input type="text" id="phone" placeholder="用于设备逾期提醒">
+        <div class="form-row">
+            <div class="form-group">
+                <label>联系电话 (选填)</label>
+                <input type="text" id="phone" placeholder="用于设备逾期提醒">
+            </div>
+            <div class="form-group">
+                <label>申请角色 *</label>
+                <select id="role_name" required>
+                    <option value="user" selected>医护人员</option>
+                    <option value="equipment_manager">设备管理人员</option>
+                </select>
+            </div>
         </div>
 
         <div class="form-group">
@@ -114,18 +123,20 @@
 </div>
 
 <script>
-    // 【核心新增】：获取 CSRF Token
+    // 获取 CSRF Token
     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
     document.getElementById('registerForm').addEventListener('submit', function(e) {
         e.preventDefault();
 
+        // 【核心新增】：抓取 role_name 的值
         const data = {
             username: document.getElementById('username').value,
             real_name: document.getElementById('real_name').value,
             department: document.getElementById('department').value,
             phone: document.getElementById('phone').value,
-            password: document.getElementById('password').value
+            password: document.getElementById('password').value,
+            role_name: document.getElementById('role_name').value  // 传给后端
         };
 
         if (data.password.length < 6) {
@@ -141,7 +152,6 @@
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                // 【核心新增】：添加 CSRF 请求头，否则会被 Flask 拦截
                 'X-CSRFToken': csrfToken
             },
             body: JSON.stringify(data)

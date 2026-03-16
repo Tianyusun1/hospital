@@ -7,6 +7,7 @@ from datetime import datetime
 class Role(db.Model):
     __tablename__ = 'roles'
     id = db.Column(db.Integer, primary_key=True)
+    # role_name 取值：'admin' (超级管理员), 'equipment_manager' (设备管理人员), 'user' (普通医护人员)
     role_name = db.Column(db.String(50), unique=True, nullable=False)
     description = db.Column(db.String(255))
 
@@ -26,6 +27,10 @@ class User(db.Model):
     # --- 新增：账号状态 ---
     # 状态取值：'pending' (待审核), 'approved' (已通过), 'rejected' (已拒绝)
     status = db.Column(db.String(20), default='pending', nullable=False)
+
+    # --- 新增：账号安全防爆破字段 ---
+    failed_login_attempts = db.Column(db.Integer, default=0, nullable=False)  # 连续登录失败次数
+    is_locked = db.Column(db.Boolean, default=False, nullable=False)          # 账号是否因多次密码错误被锁定
 
     # 外键关联角色表
     role_id = db.Column(db.Integer, db.ForeignKey('roles.id'), nullable=False)

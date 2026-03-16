@@ -4,7 +4,7 @@ from app import create_app
 from app.extensions import db
 from app.models.user import Role, User
 from app.models.equipment import Equipment, BorrowRecord  # 引入设备与借还记录模型
-from app.models.log import SysLog  # 【核心新增】：引入日志模型，确保审计日志表被创建
+from app.models.log import SysLog  # 引入日志模型，确保审计日志表被创建
 from werkzeug.security import generate_password_hash
 
 # ==========================================
@@ -38,14 +38,17 @@ def reset_database():
         # 执行重置操作：先删后建，确保模型变更生效
         db.drop_all()
         db.create_all()
-        print("✅ 1. 数据库表结构 (含 equipments, borrow_records, sys_logs) 重置成功！")
+        print("✅ 1. 数据库表结构 (含 users, roles, equipments, borrow_records, sys_logs) 重置成功！")
 
         # 3. 初始化角色表 (RBAC 基础)
         admin_role = Role(role_name='admin', description='系统管理员')
         user_role = Role(role_name='user', description='普通医护人员')
-        db.session.add_all([admin_role, user_role])
+        # --- 【核心新增】：初始化设备管理员角色 ---
+        equipment_manager_role = Role(role_name='equipment_manager', description='设备管理人员')
+
+        db.session.add_all([admin_role, user_role, equipment_manager_role])
         db.session.commit()
-        print("✅ 2. 系统角色 (admin, user) 初始化成功。")
+        print("✅ 2. 系统角色 (admin, user, equipment_manager) 初始化成功。")
 
         # 4. 初始化超级管理员账号 (设置状态为 approved)
         hashed_pw = generate_password_hash('123456')
@@ -62,7 +65,7 @@ def reset_database():
         db.session.commit()
         print("✅ 3. 超级管理员账号初始化完毕！(账号: admin, 密码: 123456)")
 
-        # 5. 【核心更新】：初始化包含“规格信息”的测试医疗设备
+        # 5. 初始化包含“规格信息”的测试医疗设备
         eq1 = Equipment(
             name="便携式心电图机",
             serial_number="EKG-2026-001",
@@ -98,8 +101,9 @@ def reset_database():
         db.session.commit()
         print("✅ 4. 测试医疗设备及初始化审计日志已存入。")
 
-    print("\n🎉 数据库重置大功告成，功能图中所有底层架构已就绪！")
-    print("👉 请运行 python run.py 启动系统进行测试。")
+    print("\n🎉 数据库重置大功告成，后端所有新增功能底座已就绪！")
+    print("👉 请在终端运行 `python init_db.py` 重新生成数据库表结构。")
+    print("👉 然后运行 `python run.py` 启动系统进行全面测试。")
 
 
 if __name__ == '__main__':

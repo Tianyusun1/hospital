@@ -69,7 +69,7 @@
         <a href="/dashboard" style="text-decoration: none; color: var(--primary-color); font-weight: bold;">返回工作台</a>
     </div>
 
-    {% if role_id == 1 %}
+    {% if session.get('role_name') in ['admin', 'equipment_manager'] %}
     <button class="btn btn-add" onclick="showAddModal()">+ 录入新设备</button>
     {% endif %}
 
@@ -153,7 +153,8 @@
 </div>
 
 <script>
-    const currentUserRole = {{ role_id | default(0) }};
+    // 【核心修改】：通过 Jinja 注入当前用户的 role_name 到 JS 变量中
+    const currentUserRoleName = "{{ session.get('role_name', 'user') }}";
 
     // XSS 防护：简单的字符转义函数
     function escapeHtml(text) {
@@ -222,7 +223,7 @@
                             ${eq.status_code === 1 ?
                                 `<button class="btn btn-return" onclick="handleReturn(${eq.id})">归还</button>` : ''
                             }
-                            ${currentUserRole === 1 ?
+                            ${['admin', 'equipment_manager'].includes(currentUserRoleName) ?
                                 `<button class="btn btn-edit" onclick='showEditModal(${JSON.stringify(eq).replace(/'/g, "&apos;")})'>编辑</button>
                                  <button class="btn btn-status" onclick="showStatusModal(${eq.id}, '${escapeHtml(eq.name)}', ${eq.status_code})">状态管理</button>` : ''
                             }
@@ -272,7 +273,6 @@
         .then(res => res.json())
         .then(res => {
             if (res.risk_warning) {
-                // 如果后端返回了风险预警消息，进行高亮弹窗提醒
                 alert("⚠️ 归还成功，但触发安全审计警告：\n" + res.risk_warning);
             } else {
                 alert(res.msg);

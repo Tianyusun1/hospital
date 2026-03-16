@@ -96,7 +96,8 @@ def get_all_users():
         'real_name': u.real_name,
         'department': u.department,
         'role_name': u.role.role_name if u.role else '未分配',
-        'status': u.status
+        'status': u.status,
+        'is_locked': u.is_locked  # --- 【新增】：返回锁定状态供前端显示 ---
     } for u in users]
     return jsonify({'code': 200, 'data': data})
 
@@ -110,10 +111,15 @@ def update_user_info():
 
     if 'role_id' in data:
         user.role_id = data['role_id']
-    if 'new_password' in data:
+    if 'new_password' in data and data['new_password']:
         user.password_hash = generate_password_hash(data['new_password'])
     if 'status' in data:
         user.status = data['status']
+
+    # --- 【新增】：超级管理员解锁账号功能 ---
+    if 'unlock' in data and data['unlock'] is True:
+        user.is_locked = False
+        user.failed_login_attempts = 0
 
     # --- 行为安全检测 ---
     r_level, r_msg = check_operation_risk()
@@ -129,6 +135,37 @@ def update_user_info():
     db.session.add(update_log)
     db.session.commit()
     return jsonify({'code': 200, 'msg': '用户信息更新成功'})
+
+
+# --- 【新增】：管理员彻底删除系统用户 ---
+@admin_bp.route('/api/users/delete', methods=['POST'])
+@admin_required
+def delete_user():
+    data = request.get_json()
+    user = User.query.get(data.get('user_id'))
+
+    if not user:
+        return jsonify({'code': 404, 'msg': '用户不存在'})
+
+    # 防呆设计：防止管理员把自己删了
+    if user.id == session.get('user_id'):
+        return jsonify({'code': 400, 'msg': '操作拒绝：不能删除当前登录的账号'})
+
+    username = user.username
+    db.session.delete(user)
+
+    r_level, r_msg = check_operation_risk()
+    del_log = SysLog(
+        user_id=session.get('user_id'),
+        action='删除用户',
+        target=f"被删用户: {username}",
+        ip_address=get_real_ip(),
+        risk_level=r_level,
+        risk_msg=r_msg
+    )
+    db.session.add(del_log)
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '该用户已被彻底删除'})
 
 
 # ================= 2. 借还审计与系统日志 =================

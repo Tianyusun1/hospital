@@ -3,7 +3,8 @@ from flask import Blueprint, request, jsonify, session, render_template, redirec
 from app.extensions import db
 from app.models.equipment import Equipment, BorrowRecord
 from app.models.log import SysLog
-from app.utils.decorators import admin_required
+# --- 【核心修改】：引入支持多角色鉴权的 roles_required ---
+from app.utils.decorators import admin_required, roles_required
 from datetime import datetime, timedelta
 # 去掉了需要你在 security.py 中额外手写的方法，直接保留核心的 check_operation_risk 即可
 from app.utils.security import check_operation_risk
@@ -75,7 +76,8 @@ def get_equipment_list():
 
 # --- 3. API: 新增设备 ---
 @equipment_bp.route('/api/add', methods=['POST'])
-@admin_required
+# --- 【核心修改】：放开权限给设备管理人员和超级管理员 ---
+@roles_required('admin', 'equipment_manager')
 def add_equipment():
     data = request.get_json()
     name = data.get('name')
@@ -112,7 +114,8 @@ def add_equipment():
 
 # --- 4. API: 修改设备基础信息 ---
 @equipment_bp.route('/api/update', methods=['POST'])
-@admin_required
+# --- 【核心修改】：放开权限给设备管理人员和超级管理员 ---
+@roles_required('admin', 'equipment_manager')
 def update_equipment():
     data = request.get_json()
     eq = Equipment.query.get(data.get('id'))
@@ -137,7 +140,8 @@ def update_equipment():
 
 # --- 5. API: 管理员强制变更设备状态 (维修/报废/下线) ---
 @equipment_bp.route('/api/admin/update_status', methods=['POST'])
-@admin_required
+# --- 【核心修改】：放开权限给设备管理人员和超级管理员 ---
+@roles_required('admin', 'equipment_manager')
 def admin_update_status():
     data = request.get_json()
     eq_id = data.get('equipment_id')
@@ -242,8 +246,9 @@ def return_equipment():
     if not equipment or equipment.status != 1:
         return jsonify({'code': 400, 'msg': '操作无效'})
 
-    is_admin = session.get('role_id') == 1 or session.get('role_name') == 'admin'
-    if equipment.current_user_id != session['user_id'] and not is_admin:
+    # --- 【核心修改】：超级管理员和设备管理人员都有权限强制归还 ---
+    is_manager_or_admin = session.get('role_name') in ['admin', 'equipment_manager']
+    if equipment.current_user_id != session['user_id'] and not is_manager_or_admin:
         return jsonify({'code': 403, 'msg': '无权归还他人借用的设备'})
 
     active_record = BorrowRecord.query.filter_by(

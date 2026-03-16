@@ -4,17 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>用户入网审核 - 设备借还管理系统</title>
+    <title>用户与权限管理 - 设备借还管理系统</title>
     <style>
         :root {
             --primary-color: #059669;
             --primary-hover: #047857;
             --danger-color: #ef4444;
             --danger-hover: #dc2626;
+            --warning-color: #f59e0b;
             --bg-color: #f0fdf4;
             --text-main: #334155;
             --border-color: #e2e8f0;
         }
+
         body {
             font-family: 'PingFang SC', sans-serif;
             background-color: var(--bg-color);
@@ -22,23 +24,31 @@
             padding: 40px 20px;
             color: var(--text-main);
         }
+
         .container {
-            max-width: 1000px;
+            max-width: 1100px;
             margin: 0 auto;
             background: #fff;
             padding: 30px;
             border-radius: 12px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
         }
+
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
             border-bottom: 2px solid var(--bg-color);
             padding-bottom: 15px;
         }
-        .header h2 { margin: 0; color: var(--primary-color); }
+
+        .header h2 {
+            margin: 0;
+            color: var(--primary-color);
+        }
+
         .nav-links a {
             color: var(--text-main);
             text-decoration: none;
@@ -46,7 +56,10 @@
             font-size: 14px;
             font-weight: bold;
         }
-        .nav-links a:hover { color: var(--primary-color); }
+
+        .nav-links a:hover {
+            color: var(--primary-color);
+        }
 
         /* 表格样式 */
         table {
@@ -54,18 +67,23 @@
             border-collapse: collapse;
             margin-top: 10px;
         }
+
         th, td {
             padding: 14px 16px;
             text-align: left;
             border-bottom: 1px solid var(--border-color);
+            font-size: 14px;
         }
+
         th {
             background-color: #f8fafc;
             color: #64748b;
             font-weight: 600;
-            font-size: 14px;
         }
-        tr:hover { background-color: #f8fafc; }
+
+        tr:hover {
+            background-color: #f8fafc;
+        }
 
         /* 状态空提示 */
         .empty-state {
@@ -73,11 +91,15 @@
             padding: 40px;
             color: #94a3b8;
             font-size: 15px;
-            display: none; /* 默认隐藏 */
+            display: none;
         }
 
-        /* 按钮样式 */
-        .btn-group { display: flex; gap: 8px; }
+        /* 按钮与标签样式 */
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+
         .btn {
             padding: 6px 12px;
             border: none;
@@ -88,9 +110,48 @@
             color: white;
             transition: opacity 0.2s;
         }
-        .btn:hover { opacity: 0.8; }
-        .btn-approve { background-color: var(--primary-color); }
-        .btn-reject { background-color: var(--danger-color); }
+
+        .btn:hover {
+            opacity: 0.8;
+        }
+
+        .btn-approve {
+            background-color: var(--primary-color);
+        }
+
+        .btn-reject, .btn-delete {
+            background-color: var(--danger-color);
+        }
+
+        .btn-edit {
+            background-color: #3b82f6;
+        }
+
+        .btn-unlock {
+            background-color: var(--warning-color);
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .badge-safe {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-danger {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-role {
+            background-color: #e0e7ff;
+            color: #3730a3;
+        }
 
         /* 顶部消息提示框 */
         #toast {
@@ -104,7 +165,63 @@
             font-weight: bold;
             display: none;
             z-index: 1000;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 模态框样式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+        }
+
+        .modal {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            width: 400px;
+        }
+
+        .modal h3 {
+            margin-top: 0;
+            color: var(--primary-color);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .form-group select, .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn-cancel {
+            background-color: #94a3b8;
         }
     </style>
 </head>
@@ -114,66 +231,106 @@
 
 <div class="container">
     <div class="header">
-        <h2>待审核入网申请</h2>
+        <h2>📥 待审核入网申请</h2>
         <div class="nav-links">
             <a href="/dashboard">返回工作台</a>
             <a href="#" onclick="logout()">安全退出</a>
         </div>
     </div>
-
     <table>
         <thead>
-            <tr>
-                <th>工号</th>
-                <th>真实姓名</th>
-                <th>科室</th>
-                <th>联系电话</th>
-                <th>申请时间</th>
-                <th>操作</th>
-            </tr>
+        <tr>
+            <th>工号</th>
+            <th>真实姓名</th>
+            <th>科室</th>
+            <th>联系电话</th>
+            <th>申请时间</th>
+            <th>操作</th>
+        </tr>
         </thead>
-        <tbody id="userTableBody">
-            </tbody>
+        <tbody id="pendingTableBody"></tbody>
     </table>
+    <div id="pendingEmptyState" class="empty-state">目前没有需要审核的入网申请 🎉</div>
+</div>
 
-    <div id="emptyState" class="empty-state">
-        目前没有需要审核的入网申请 🎉
+<div class="container">
+    <div class="header">
+        <h2>👥 全院系统用户管理</h2>
+        <button class="btn btn-approve" onclick="fetchAllUsers()">刷新列表</button>
+    </div>
+    <table>
+        <thead>
+        <tr>
+            <th>工号</th>
+            <th>真实姓名</th>
+            <th>科室</th>
+            <th>系统角色</th>
+            <th>安全状态</th>
+            <th>操作</th>
+        </tr>
+        </thead>
+        <tbody id="allUsersTableBody"></tbody>
+    </table>
+</div>
+
+<div class="modal-overlay" id="editModal">
+    <div class="modal">
+        <h3>编辑用户信息</h3>
+        <input type="hidden" id="editUserId">
+        <div class="form-group">
+            <label>当前用户：</label>
+            <input type="text" id="editUserName" disabled style="background-color: #f1f5f9; color: #64748b;">
+        </div>
+        <div class="form-group">
+            <label>分配角色权限：</label>
+            <select id="editRole">
+                <option value="1">系统超级管理员 (Admin)</option>
+                <option value="2">普通医护人员 (User)</option>
+                <option value="3">设备管理人员 (Equipment Manager)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>重置密码 (留空则不修改)：</label>
+            <input type="password" id="editPassword" placeholder="输入新密码">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-cancel" onclick="closeModal()">取消</button>
+            <button class="btn btn-approve" onclick="submitEdit()">保存修改</button>
+        </div>
     </div>
 </div>
 
 <script>
-    // 页面加载完毕后，立即去后端拉取数据
-    document.addEventListener('DOMContentLoaded', fetchPendingUsers);
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
-    // 获取待审核用户列表
+    // 页面加载完毕后拉取所有数据
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchPendingUsers();
+        fetchAllUsers();
+    });
+
+    // ================= 1. 待审核逻辑 =================
     function fetchPendingUsers() {
-        // 注意：因为我们在蓝图加了 url_prefix='/admin'，所以接口路径是 /admin/api/...
-        // GET 请求不需要 CSRF Token
         fetch('/admin/api/users/pending')
-            .then(res => res.json())
-            .then(data => {
-                if (data.code === 200) {
-                    renderTable(data.data);
-                } else if (data.code === 401 || data.code === 403) {
-                    // 如果没登录或者不是管理员，踢回登录页
-                    alert(data.msg);
-                    window.location.href = '/login';
-                }
-            })
-            .catch(err => showToast('获取数据失败，请检查网络', '#ef4444'));
+                .then(res => res.json())
+                .then(data => {
+                    if (data.code === 200) renderPendingTable(data.data);
+                    else if (data.code === 401 || data.code === 403) {
+                        alert(data.msg);
+                        window.location.href = '/login';
+                    }
+                })
+                .catch(err => showToast('获取待审核数据失败', '#ef4444'));
     }
 
-    // 将数据渲染到 HTML 表格中
-    function renderTable(users) {
-        const tbody = document.getElementById('userTableBody');
-        const emptyState = document.getElementById('emptyState');
-        tbody.innerHTML = ''; // 清空旧数据
-
+    function renderPendingTable(users) {
+        const tbody = document.getElementById('pendingTableBody');
+        const emptyState = document.getElementById('pendingEmptyState');
+        tbody.innerHTML = '';
         if (users.length === 0) {
             emptyState.style.display = 'block';
             return;
         }
-
         emptyState.style.display = 'none';
 
         users.forEach(user => {
@@ -195,55 +352,150 @@
         });
     }
 
-    // 处理审核操作 (通过/拒绝)
     function reviewUser(userId, action) {
-        if (action === 'reject' && !confirm('确定要拒绝该用户的入网申请吗？')) {
-            return;
-        }
-
-        // 【修复点2】：获取 meta 标签中的 CSRF Token
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-
+        if (action === 'reject' && !confirm('确定要拒绝该申请吗？')) return;
         fetch('/admin/api/users/do_review', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken  // 【核心修复】：请求头中携带 CSRF Token
-            },
-            body: JSON.stringify({ user_id: userId, action: action })
-        })
-        .then(res => res.json())
-        .then(data => {
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify({user_id: userId, action: action})
+        }).then(res => res.json()).then(data => {
             if (data.code === 200) {
                 showToast(data.msg, '#059669');
-                fetchPendingUsers(); // 重新拉取最新列表，刷新表格
-            } else {
-                showToast(data.msg, '#ef4444');
-            }
-        })
-        .catch(err => showToast('操作失败，请重试', '#ef4444'));
+                fetchPendingUsers();
+                fetchAllUsers(); // 如果通过了，刷新下方所有用户列表
+            } else showToast(data.msg, '#ef4444');
+        });
     }
 
-    // 退出登录逻辑
-    function logout() {
-        // 【修复点3】：退出登录的 POST 请求同样需要 CSRF Token
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    // ================= 2. 全院用户管理逻辑 =================
+    const roleDict = {
+        'admin': '超级管理员',
+        'equipment_manager': '设备管理员',
+        'user': '普通医护人员'
+    };
 
-        fetch('/api/logout', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrfToken
+    function fetchAllUsers() {
+        fetch('/admin/api/users/all')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.code === 200) renderAllUsersTable(data.data);
+                });
+    }
+
+    function renderAllUsersTable(users) {
+        const tbody = document.getElementById('allUsersTableBody');
+        tbody.innerHTML = '';
+        users.forEach(user => {
+            const roleText = roleDict[user.role_name] || user.role_name;
+            const statusBadge = user.is_locked
+                    ? `<span class="badge badge-danger">已锁定 (密码错超5次)</span>`
+                    : `<span class="badge badge-safe">安全正常</span>`;
+
+            // 构建操作按钮
+            let actionHtml = `<button class="btn btn-edit" onclick="openEditModal(${user.id}, '${user.real_name} - ${user.username}')">编辑</button>`;
+
+            if (user.is_locked) {
+                actionHtml += `<button class="btn btn-unlock" onclick="unlockUser(${user.id})">解封账号</button>`;
             }
+
+            // 保护机制：系统不展示删除 admin 自身的按钮
+            if (user.username !== 'admin') {
+                actionHtml += `<button class="btn btn-delete" onclick="deleteUser(${user.id}, '${user.real_name}')">删除</button>`;
+            }
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${user.username}</td>
+                <td><strong>${user.real_name}</strong></td>
+                <td>${user.department}</td>
+                <td><span class="badge badge-role">${roleText}</span></td>
+                <td>${statusBadge}</td>
+                <td><div class="btn-group">${actionHtml}</div></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // 解封账号
+    function unlockUser(userId) {
+        if (!confirm('确定要解除该账号的安全锁定状态吗？解封后用户即可重新尝试登录。')) return;
+        fetch('/admin/api/users/update', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify({user_id: userId, unlock: true})
+        }).then(res => res.json()).then(data => {
+            if (data.code === 200) {
+                showToast('账号已解封', '#059669');
+                fetchAllUsers();
+            } else showToast(data.msg, '#ef4444');
+        });
+    }
+
+    // 彻底删除账号
+    function deleteUser(userId, realName) {
+        if (!confirm(`🚨 危险操作：您确定要彻底删除用户【${realName}】吗？此操作不可逆！`)) return;
+        fetch('/admin/api/users/delete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify({user_id: userId})
+        }).then(res => res.json()).then(data => {
+            if (data.code === 200) {
+                showToast('已彻底删除该用户', '#059669');
+                fetchAllUsers();
+            } else showToast(data.msg, '#ef4444');
+        });
+    }
+
+    // ================= 3. 编辑模态框逻辑 =================
+    function openEditModal(userId, displayName) {
+        document.getElementById('editUserId').value = userId;
+        document.getElementById('editUserName').value = displayName;
+        document.getElementById('editPassword').value = ''; // 清空密码框
+        document.getElementById('editModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('editModal').style.display = 'none';
+    }
+
+    function submitEdit() {
+        const userId = document.getElementById('editUserId').value;
+        const roleId = document.getElementById('editRole').value;
+        const newPassword = document.getElementById('editPassword').value;
+
+        const payload = {user_id: userId, role_id: parseInt(roleId)};
+        if (newPassword.trim() !== '') {
+            payload.new_password = newPassword.trim();
+        }
+
+        fetch('/admin/api/users/update', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify(payload)
+        }).then(res => res.json()).then(data => {
+            if (data.code === 200) {
+                showToast('用户信息修改成功', '#059669');
+                closeModal();
+                fetchAllUsers();
+            } else showToast(data.msg, '#ef4444');
+        });
+    }
+
+    // ================= 工具函数 =================
+    function logout() {
+        fetch('/api/logout', {
+            method: 'POST', headers: {'X-CSRFToken': csrfToken}
         }).then(() => window.location.href = '/login');
     }
 
-    // 显示顶部提示框
     function showToast(msg, color) {
         const toast = document.getElementById('toast');
         toast.innerText = msg;
         toast.style.backgroundColor = color;
         toast.style.display = 'block';
-        setTimeout(() => { toast.style.display = 'none'; }, 3000);
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 3000);
     }
 </script>
 

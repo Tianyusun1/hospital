@@ -40,6 +40,10 @@ def api_login():
     if user is None:
         return jsonify({'code': 401, 'msg': '该工号不存在，请先注册'})
 
+    # --- 【新增】：检查账号是否被安全锁定 ---
+    if user.is_locked:
+        return jsonify({'code': 403, 'msg': '账号因多次输入错误已被安全锁定，请联系超级管理员解锁'})
+
     # 检查账号状态 (RBAC 核心逻辑)
     if user.status == 'pending':
         return jsonify({'code': 403, 'msg': '账号正在等待管理员审核，请耐心等待'})
@@ -48,6 +52,10 @@ def api_login():
 
     # 验证密码
     if check_password_hash(user.password_hash, password):
+        # --- 【新增】：登录成功，重置失败次数 ---
+        user.failed_login_attempts = 0
+        db.session.commit()
+
         # 1. 设置 Session 保持登录状态
         session['user_id'] = user.id
         session['username'] = user.username
@@ -73,7 +81,15 @@ def api_login():
 
         return jsonify({'code': 200, 'msg': '登录成功'})
     else:
-        return jsonify({'code': 401, 'msg': '密码错误'})
+        # --- 【新增】：密码错误，累计失败次数并判定是否锁定 ---
+        user.failed_login_attempts += 1
+        if user.failed_login_attempts >= 5:
+            user.is_locked = True
+            db.session.commit()
+            return jsonify({'code': 401, 'msg': '密码连续错误5次，账号已被安全锁定！'})
+
+        db.session.commit()
+        return jsonify({'code': 401, 'msg': f'密码错误！连续错误5次将锁定，还剩 {5 - user.failed_login_attempts} 次机会'})
 
 
 # ================= 注册相关 =================
@@ -91,6 +107,9 @@ def api_register():
     department = data.get('department')
     phone = data.get('phone')
 
+    # --- 【新增】：获取前端传来的申请角色，默认值为普通医护人员 'user' ---
+    requested_role_name = data.get('role_name', 'user')
+
     # 简单的输入验证
     if not all([username, password, real_name, department]):
         return jsonify({'code': 400, 'msg': '请填写所有必填项'})
@@ -98,10 +117,16 @@ def api_register():
     if User.query.filter_by(username=username).first():
         return jsonify({'code': 400, 'msg': '该工号已注册，请直接登录或联系管理员'})
 
-    default_role = Role.query.filter_by(role_name='user').first()
-    if not default_role:
-        default_role = Role(role_name='user', description='普通医护人员')
-        db.session.add(default_role)
+    # --- 【新增】：验证申请的角色是否合法，不合法则降级为 user ---
+    if requested_role_name not in ['user', 'equipment_manager']:
+        requested_role_name = 'user'
+
+    target_role = Role.query.filter_by(role_name=requested_role_name).first()
+
+    # 如果数据库此时还没初始化该角色，容错处理
+    if not target_role:
+        target_role = Role(role_name=requested_role_name, description='系统角色')
+        db.session.add(target_role)
         db.session.commit()
 
     hashed_pw = generate_password_hash(password)
@@ -111,7 +136,7 @@ def api_register():
         real_name=real_name,
         department=department,
         phone=phone,
-        role_id=default_role.id,
+        role_id=target_role.id,  # 【修改】：分配用户申请对应的角色
         status='pending'
     )
 
@@ -124,7 +149,7 @@ def api_register():
     reg_log = SysLog(
         user_id=new_user.id,  # 【核心修复】：精准绑定操作人为刚注册的用户
         action='用户注册',
-        target=f"工号: {username}",
+        target=f"工号: {username}, 申请角色: {requested_role_name}",  # 日志里带上申请的角色
         ip_address=get_real_ip(),  # 【安全修复】：使用真实 IP
         risk_level=r_risk_level,
         risk_msg=r_risk_msg
