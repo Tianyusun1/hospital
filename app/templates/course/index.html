@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>课程与班级 - 摄影机构管理系统</title>
+    <style>
+        :root { --primary-color: #059669; --primary-light: #d1fae5; --sidebar-bg: #1e293b; --sidebar-hover: #334155; --bg-color: #f1f5f9; --text-main: #334155; --border-color: #e2e8f0; }
+        body { font-family: 'PingFang SC', sans-serif; margin: 0; display: flex; height: 100vh; background-color: var(--bg-color); color: var(--text-main); }
+        .sidebar { width: 220px; background-color: var(--sidebar-bg); color: white; display: flex; flex-direction: column; box-shadow: 2px 0 5px rgba(0,0,0,0.1); flex-shrink: 0; }
+        .logo { padding: 18px; text-align: center; font-size: 16px; font-weight: bold; background-color: #0f172a; letter-spacing: 1px; border-bottom: 1px solid #334155; }
+        .logo span { color: var(--primary-color); }
+        .menu { flex: 1; padding: 15px 0; overflow-y: auto; }
+        .menu a { display: block; padding: 13px 20px; color: #cbd5e1; text-decoration: none; font-size: 14px; transition: all 0.3s; border-left: 4px solid transparent; }
+        .menu a:hover, .menu a.active { background-color: var(--sidebar-hover); color: white; border-left-color: var(--primary-color); }
+        .menu-title { padding: 8px 20px; font-size: 11px; color: #64748b; text-transform: uppercase; margin-top: 10px; }
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .topbar { height: 55px; background-color: white; display: flex; justify-content: space-between; align-items: center; padding: 0 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .user-info { display: flex; align-items: center; gap: 12px; }
+        .role-badge { padding: 3px 9px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .badge-admin { background-color: var(--primary-light); color: var(--primary-color); }
+        .badge-staff { background-color: #fef08a; color: #854d0e; }
+        .badge-teacher { background-color: #e0f2fe; color: #0284c7; }
+        .logout-btn { background: transparent; border: 1px solid #e2e8f0; padding: 5px 12px; border-radius: 6px; cursor: pointer; color: #64748b; transition: all 0.2s; }
+        .logout-btn:hover { color: #ef4444; border-color: #ef4444; }
+        .workspace { padding: 25px; flex: 1; overflow-y: auto; }
+        .tabs { display: flex; gap: 5px; margin-bottom: -1px; position: relative; z-index: 1; }
+        .tab { padding: 10px 20px; background: #e2e8f0; border: 1px solid var(--border-color); border-bottom: none; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 14px; font-weight: bold; color: #64748b; }
+        .tab.active { background: white; color: var(--primary-color); border-top: 3px solid var(--primary-color); }
+        .tab-content { display: none; background: white; border: 1px solid var(--border-color); border-radius: 0 8px 8px 8px; padding: 20px; }
+        .tab-content.active { display: block; }
+        .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; transition: all 0.2s; }
+        .btn-primary { background: var(--primary-color); color: white; }
+        .btn-primary:hover { background: #047857; }
+        .btn-secondary { background: #f1f5f9; color: var(--text-main); border: 1px solid var(--border-color); }
+        .btn-secondary:hover { background: #e2e8f0; }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 13px; }
+        th { background-color: #f8fafc; color: #64748b; font-weight: 600; }
+        tr:hover { background-color: #f8fafc; }
+        .status-badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+        .status-active { background: #dcfce7; color: #166534; }
+        .status-inactive { background: #f1f5f9; color: #64748b; }
+        .status-open { background: #dcfce7; color: #166534; }
+        .status-closed { background: #fef3c7; color: #92400e; }
+        .status-finished { background: #e0f2fe; color: #0c4a6e; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: white; border-radius: 12px; padding: 30px; width: 500px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+        .modal h3 { margin-top: 0; color: var(--primary-color); }
+        .form-group { margin-bottom: 14px; }
+        .form-row { display: flex; gap: 12px; }
+        .form-row .form-group { flex: 1; }
+        label { display: block; margin-bottom: 5px; font-size: 13px; font-weight: 500; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; box-sizing: border-box; font-size: 13px; background: #f8fafc; }
+        input:focus, select:focus, textarea:focus { border-color: var(--primary-color); outline: none; background: white; }
+        .msg-tip { padding: 10px; border-radius: 6px; font-size: 13px; margin-bottom: 10px; display: none; }
+        .msg-error { background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; }
+        .msg-success { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="logo">📷 <span>摄影机构</span>管理</div>
+    <div class="menu">
+        <a href="/dashboard">🏠 工作台首页</a>
+        {% if role_name in ['admin', 'staff'] %}
+        <div class="menu-title">学员业务</div>
+        <a href="/student/">📋 学员管理</a>
+        {% endif %}
+        <div class="menu-title">教学管理</div>
+        <a href="/course/" class="active">📚 课程与班级</a>
+        <a href="/work/">🖼️ 作品管理</a>
+        {% if role_name == 'admin' %}
+        <div class="menu-title">系统管理</div>
+        <a href="/admin/users/review">👥 用户管理</a>
+        <a href="/admin/audit">📝 审计日志</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="topbar">
+        <div><strong>当前位置：</strong>课程与班级管理</div>
+        <div class="user-info">
+            <span>你好，<strong>{{ real_name }}</strong></span>
+            {% if role_name == 'admin' %}<span class="role-badge badge-admin">超级管理员</span>
+            {% elif role_name == 'staff' %}<span class="role-badge badge-staff">教务/前台</span>
+            {% else %}<span class="role-badge badge-teacher">教师</span>{% endif %}
+            <button class="logout-btn" onclick="logout()">退出</button>
+        </div>
+    </div>
+
+    <div class="workspace">
+        <div class="tabs">
+            <div class="tab active" id="tab-btn-courses" onclick="switchTab('courses')">📚 课程列表</div>
+            <div class="tab" id="tab-btn-classes" onclick="switchTab('classes')">🏫 班级列表</div>
+        </div>
+
+        <!-- 课程列表 -->
+        <div id="tab-courses" class="tab-content active">
+            <div class="toolbar">
+                <span style="font-weight:bold;color:var(--primary-color)">课程管理</span>
+                {% if role_name in ['admin', 'staff'] %}
+                <button class="btn btn-primary" onclick="openModal('addCourseModal')">+ 新增课程</button>
+                {% endif %}
+            </div>
+            <table>
+                <thead><tr><th>ID</th><th>课程名称</th><th>描述</th><th>价格</th><th>周期</th><th>状态</th>{% if role_name in ['admin','staff'] %}<th>操作</th>{% endif %}</tr></thead>
+                <tbody id="courseBody"><tr><td colspan="7" style="text-align:center;color:#94a3b8">加载中...</td></tr></tbody>
+            </table>
+        </div>
+
+        <!-- 班级列表 -->
+        <div id="tab-classes" class="tab-content">
+            <div class="toolbar">
+                <span style="font-weight:bold;color:var(--primary-color)">班级管理</span>
+                {% if role_name in ['admin', 'staff'] %}
+                <button class="btn btn-primary" onclick="openModal('addClassModal')">+ 新增班级</button>
+                {% endif %}
+            </div>
+            <table>
+                <thead><tr><th>ID</th><th>班级编号</th><th>课程</th><th>教师</th><th>开始日期</th><th>结束日期</th><th>容量</th><th>状态</th>{% if role_name in ['admin','staff'] %}<th>操作</th>{% endif %}</tr></thead>
+                <tbody id="classBody"><tr><td colspan="9" style="text-align:center;color:#94a3b8">加载中...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 新增课程弹窗 -->
+<div class="modal-overlay" id="addCourseModal">
+    <div class="modal">
+        <h3>新增课程</h3>
+        <div id="courseFormMsg" class="msg-tip"></div>
+        <div class="form-group"><label>课程名称 *</label><input type="text" id="c_name" placeholder="如: 人像摄影基础班"></div>
+        <div class="form-group"><label>课程描述</label><textarea id="c_desc" rows="3" placeholder="课程简介"></textarea></div>
+        <div class="form-row">
+            <div class="form-group"><label>价格 (元)</label><input type="number" id="c_price" placeholder="如: 2980" step="0.01"></div>
+            <div class="form-group"><label>课程周期 (周)</label><input type="number" id="c_weeks" placeholder="如: 8"></div>
+        </div>
+        <div class="form-group"><label>状态</label>
+            <select id="c_status"><option value="active">开放报名</option><option value="inactive">暂停招生</option></select>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:15px">
+            <button class="btn btn-secondary" onclick="closeModal('addCourseModal')">取消</button>
+            <button class="btn btn-primary" onclick="submitAddCourse()">确认添加</button>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑课程弹窗 -->
+<div class="modal-overlay" id="editCourseModal">
+    <div class="modal">
+        <h3>编辑课程</h3>
+        <input type="hidden" id="edit_c_id">
+        <div id="editCourseFormMsg" class="msg-tip"></div>
+        <div class="form-group"><label>课程名称 *</label><input type="text" id="edit_c_name"></div>
+        <div class="form-group"><label>课程描述</label><textarea id="edit_c_desc" rows="3"></textarea></div>
+        <div class="form-row">
+            <div class="form-group"><label>价格 (元)</label><input type="number" id="edit_c_price" step="0.01"></div>
+            <div class="form-group"><label>课程周期 (周)</label><input type="number" id="edit_c_weeks"></div>
+        </div>
+        <div class="form-group"><label>状态</label>
+            <select id="edit_c_status"><option value="active">开放报名</option><option value="inactive">暂停招生</option></select>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:15px">
+            <button class="btn btn-secondary" onclick="closeModal('editCourseModal')">取消</button>
+            <button class="btn btn-primary" onclick="submitEditCourse()">保存修改</button>
+        </div>
+    </div>
+</div>
+
+<!-- 新增班级弹窗 -->
+<div class="modal-overlay" id="addClassModal">
+    <div class="modal">
+        <h3>新增班级</h3>
+        <div id="classFormMsg" class="msg-tip"></div>
+        <div class="form-row">
+            <div class="form-group"><label>班级编号 *</label><input type="text" id="cl_no" placeholder="如: RX-2024-02"></div>
+            <div class="form-group"><label>所属课程 *</label>
+                <select id="cl_course_id"><option value="">加载中...</option></select>
+            </div>
+        </div>
+        <div class="form-group"><label>负责教师</label>
+            <select id="cl_teacher_id"><option value="">请选择教师</option></select>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>开始日期</label><input type="date" id="cl_start"></div>
+            <div class="form-group"><label>结束日期</label><input type="date" id="cl_end"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>容量 (人)</label><input type="number" id="cl_capacity" value="20"></div>
+            <div class="form-group"><label>状态</label>
+                <select id="cl_status">
+                    <option value="open">招生中</option>
+                    <option value="closed">已关闭</option>
+                    <option value="finished">已结课</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group"><label>备注</label><textarea id="cl_notes" rows="2"></textarea></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:15px">
+            <button class="btn btn-secondary" onclick="closeModal('addClassModal')">取消</button>
+            <button class="btn btn-primary" onclick="submitAddClass()">确认添加</button>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑班级弹窗 -->
+<div class="modal-overlay" id="editClassModal">
+    <div class="modal">
+        <h3>编辑班级</h3>
+        <input type="hidden" id="edit_cl_id">
+        <div id="editClassFormMsg" class="msg-tip"></div>
+        <div class="form-row">
+            <div class="form-group"><label>班级编号 *</label><input type="text" id="edit_cl_no"></div>
+            <div class="form-group"><label>所属课程 *</label>
+                <select id="edit_cl_course_id"></select>
+            </div>
+        </div>
+        <div class="form-group"><label>负责教师</label>
+            <select id="edit_cl_teacher_id"><option value="">未分配</option></select>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>开始日期</label><input type="date" id="edit_cl_start"></div>
+            <div class="form-group"><label>结束日期</label><input type="date" id="edit_cl_end"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>容量</label><input type="number" id="edit_cl_capacity"></div>
+            <div class="form-group"><label>状态</label>
+                <select id="edit_cl_status">
+                    <option value="open">招生中</option>
+                    <option value="closed">已关闭</option>
+                    <option value="finished">已结课</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group"><label>备注</label><textarea id="edit_cl_notes" rows="2"></textarea></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:15px">
+            <button class="btn btn-secondary" onclick="closeModal('editClassModal')">取消</button>
+            <button class="btn btn-primary" onclick="submitEditClass()">保存修改</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const roleName = '{{ role_name }}';
+    let coursesData = [];
+    let teachersData = [];
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const map = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'};
+        return String(text).replace(/[&<>"']/g, m => map[m]);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadCourses();
+        loadTeachers();
+    });
+
+    function switchTab(name) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById('tab-btn-' + name).classList.add('active');
+        document.getElementById('tab-' + name).classList.add('active');
+        if (name === 'classes') loadClasses();
+    }
+
+    function loadCourses() {
+        fetch('/course/api/list').then(r => r.json()).then(res => {
+            coursesData = res.data || [];
+            const body = document.getElementById('courseBody');
+            if (!coursesData.length) { body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8">暂无课程数据</td></tr>'; return; }
+            const statusMap = {active: ['开放报名','status-active'], inactive: ['暂停招生','status-inactive']};
+            body.innerHTML = coursesData.map(c => {
+                const [label, cls] = statusMap[c.status] || [c.status, ''];
+                const edBtn = ['admin','staff'].includes(roleName) ? `<button class="btn btn-secondary btn-sm" onclick="openEditCourse(${JSON.stringify(c).replace(/"/g,'&quot;')})">编辑</button>` : '';
+                return `<tr><td>#${c.id}</td><td><strong>${escapeHtml(c.name)}</strong></td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.description)}</td>
+                    <td>${c.price ? '¥' + c.price.toFixed(2) : '-'}</td>
+                    <td>${c.duration_weeks ? c.duration_weeks + '周' : '-'}</td>
+                    <td><span class="status-badge ${cls}">${label}</span></td>
+                    <td>${edBtn}</td></tr>`;
+            }).join('');
+            // Populate course selects
+            populateCourseSelects();
+        });
+    }
+
+    function loadClasses() {
+        fetch('/class/api/list').then(r => r.json()).then(res => {
+            const body = document.getElementById('classBody');
+            if (!res.data || !res.data.length) { body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8">暂无班级数据</td></tr>'; return; }
+            const statusMap = {open: ['招生中','status-open'], closed: ['已关闭','status-closed'], finished: ['已结课','status-finished']};
+            body.innerHTML = res.data.map(tc => {
+                const [label, cls] = statusMap[tc.status] || [tc.status, ''];
+                const edBtn = ['admin','staff'].includes(roleName) ? `<button class="btn btn-secondary btn-sm" onclick="openEditClass(${JSON.stringify(tc).replace(/"/g,'&quot;')})">编辑</button>` : '';
+                return `<tr><td>#${tc.id}</td><td><strong>${escapeHtml(tc.class_no)}</strong></td>
+                    <td>${escapeHtml(tc.course_name)}</td>
+                    <td>${escapeHtml(tc.teacher_name)}</td>
+                    <td>${escapeHtml(tc.start_date) || '-'}</td>
+                    <td>${escapeHtml(tc.end_date) || '-'}</td>
+                    <td>${tc.capacity}</td>
+                    <td><span class="status-badge ${cls}">${label}</span></td>
+                    <td>${edBtn}</td></tr>`;
+            }).join('');
+        });
+    }
+
+    function loadTeachers() {
+        fetch('/course/api/teachers').then(r => r.json()).then(res => {
+            teachersData = res.data || [];
+            populateTeacherSelects();
+        });
+    }
+
+    function populateCourseSelects() {
+        const opts = coursesData.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+        ['cl_course_id', 'edit_cl_course_id'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = '<option value="">请选择课程</option>' + opts;
+        });
+    }
+
+    function populateTeacherSelects() {
+        const opts = teachersData.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+        ['cl_teacher_id', 'edit_cl_teacher_id'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = '<option value="">未分配</option>' + opts;
+        });
+    }
+
+    function openModal(id) { document.getElementById(id).classList.add('active'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+    function openEditCourse(c) {
+        document.getElementById('edit_c_id').value = c.id;
+        document.getElementById('edit_c_name').value = c.name;
+        document.getElementById('edit_c_desc').value = c.description;
+        document.getElementById('edit_c_price').value = c.price;
+        document.getElementById('edit_c_weeks').value = c.duration_weeks;
+        document.getElementById('edit_c_status').value = c.status;
+        openModal('editCourseModal');
+    }
+
+    function openEditClass(tc) {
+        document.getElementById('edit_cl_id').value = tc.id;
+        document.getElementById('edit_cl_no').value = tc.class_no;
+        document.getElementById('edit_cl_start').value = tc.start_date;
+        document.getElementById('edit_cl_end').value = tc.end_date;
+        document.getElementById('edit_cl_capacity').value = tc.capacity;
+        document.getElementById('edit_cl_status').value = tc.status;
+        document.getElementById('edit_cl_notes').value = tc.notes;
+        populateCourseSelects();
+        populateTeacherSelects();
+        setTimeout(() => {
+            document.getElementById('edit_cl_course_id').value = tc.course_id;
+            if (tc.teacher_id) document.getElementById('edit_cl_teacher_id').value = tc.teacher_id;
+        }, 50);
+        openModal('editClassModal');
+    }
+
+    function showMsgTip(id, msg, type) {
+        const el = document.getElementById(id);
+        el.textContent = msg; el.className = 'msg-tip msg-' + type; el.style.display = 'block';
+    }
+
+    function submitAddCourse() {
+        const body = {name: document.getElementById('c_name').value, description: document.getElementById('c_desc').value,
+            price: document.getElementById('c_price').value || null, duration_weeks: document.getElementById('c_weeks').value || null,
+            status: document.getElementById('c_status').value};
+        postJSON('/course/api/add', body, res => {
+            if (res.code === 200) { closeModal('addCourseModal'); loadCourses(); }
+            else showMsgTip('courseFormMsg', res.msg, 'error');
+        });
+    }
+
+    function submitEditCourse() {
+        const body = {id: document.getElementById('edit_c_id').value, name: document.getElementById('edit_c_name').value,
+            description: document.getElementById('edit_c_desc').value, price: document.getElementById('edit_c_price').value || null,
+            duration_weeks: document.getElementById('edit_c_weeks').value || null, status: document.getElementById('edit_c_status').value};
+        postJSON('/course/api/update', body, res => {
+            if (res.code === 200) { closeModal('editCourseModal'); loadCourses(); }
+            else showMsgTip('editCourseFormMsg', res.msg, 'error');
+        });
+    }
+
+    function submitAddClass() {
+        const body = {class_no: document.getElementById('cl_no').value, course_id: document.getElementById('cl_course_id').value,
+            teacher_id: document.getElementById('cl_teacher_id').value || null, start_date: document.getElementById('cl_start').value,
+            end_date: document.getElementById('cl_end').value, capacity: document.getElementById('cl_capacity').value,
+            status: document.getElementById('cl_status').value, notes: document.getElementById('cl_notes').value};
+        postJSON('/class/api/add', body, res => {
+            if (res.code === 200) { closeModal('addClassModal'); loadClasses(); }
+            else showMsgTip('classFormMsg', res.msg, 'error');
+        });
+    }
+
+    function submitEditClass() {
+        const body = {id: document.getElementById('edit_cl_id').value, class_no: document.getElementById('edit_cl_no').value,
+            course_id: document.getElementById('edit_cl_course_id').value, teacher_id: document.getElementById('edit_cl_teacher_id').value || null,
+            start_date: document.getElementById('edit_cl_start').value, end_date: document.getElementById('edit_cl_end').value,
+            capacity: document.getElementById('edit_cl_capacity').value, status: document.getElementById('edit_cl_status').value,
+            notes: document.getElementById('edit_cl_notes').value};
+        postJSON('/class/api/update', body, res => {
+            if (res.code === 200) { closeModal('editClassModal'); loadClasses(); }
+            else showMsgTip('editClassFormMsg', res.msg, 'error');
+        });
+    }
+
+    function postJSON(url, data, callback) {
+        fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}, body: JSON.stringify(data)})
+            .then(r => r.json()).then(callback).catch(e => alert('请求失败: ' + e));
+    }
+
+    function logout() {
+        fetch('/api/logout', {method: 'POST', headers: {'X-CSRFToken': csrfToken}}).then(() => window.location.href = '/login');
+    }
+</script>
+</body>
+</html>
