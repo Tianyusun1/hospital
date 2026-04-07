@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>作品管理 - 摄影机构管理系统</title>
+    <style>
+        :root { --primary-color: #059669; --primary-light: #d1fae5; --sidebar-bg: #1e293b; --sidebar-hover: #334155; --bg-color: #f1f5f9; --text-main: #334155; --border-color: #e2e8f0; }
+        body { font-family: 'PingFang SC', sans-serif; margin: 0; display: flex; height: 100vh; background-color: var(--bg-color); color: var(--text-main); }
+        .sidebar { width: 220px; background-color: var(--sidebar-bg); color: white; display: flex; flex-direction: column; box-shadow: 2px 0 5px rgba(0,0,0,0.1); flex-shrink: 0; }
+        .logo { padding: 18px; text-align: center; font-size: 16px; font-weight: bold; background-color: #0f172a; letter-spacing: 1px; border-bottom: 1px solid #334155; }
+        .logo span { color: var(--primary-color); }
+        .menu { flex: 1; padding: 15px 0; overflow-y: auto; }
+        .menu a { display: block; padding: 13px 20px; color: #cbd5e1; text-decoration: none; font-size: 14px; transition: all 0.3s; border-left: 4px solid transparent; }
+        .menu a:hover, .menu a.active { background-color: var(--sidebar-hover); color: white; border-left-color: var(--primary-color); }
+        .menu-title { padding: 8px 20px; font-size: 11px; color: #64748b; text-transform: uppercase; margin-top: 10px; }
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .topbar { height: 55px; background-color: white; display: flex; justify-content: space-between; align-items: center; padding: 0 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .user-info { display: flex; align-items: center; gap: 12px; }
+        .role-badge { padding: 3px 9px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .badge-admin { background-color: var(--primary-light); color: var(--primary-color); }
+        .badge-staff { background-color: #fef08a; color: #854d0e; }
+        .badge-teacher { background-color: #e0f2fe; color: #0284c7; }
+        .badge-student { background-color: #f3e8ff; color: #7c3aed; }
+        .logout-btn { background: transparent; border: 1px solid #e2e8f0; padding: 5px 12px; border-radius: 6px; cursor: pointer; color: #64748b; transition: all 0.2s; }
+        .logout-btn:hover { color: #ef4444; border-color: #ef4444; }
+        .workspace { padding: 25px; flex: 1; overflow-y: auto; }
+        .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
+        .content-box { background: white; border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; }
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; transition: all 0.2s; }
+        .btn-primary { background: var(--primary-color); color: white; }
+        .btn-primary:hover { background: #047857; }
+        .btn-secondary { background: #f1f5f9; color: var(--text-main); border: 1px solid var(--border-color); }
+        .btn-secondary:hover { background: #e2e8f0; }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+        .btn-review { background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; }
+        .btn-review:hover { background: #bae6fd; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 13px; }
+        th { background-color: #f8fafc; color: #64748b; font-weight: 600; }
+        tr:hover { background-color: #f8fafc; }
+        .status-badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+        .status-submitted { background: #fef3c7; color: #92400e; }
+        .status-reviewed { background: #dcfce7; color: #166534; }
+        .status-overdue { background: #fee2e2; color: #991b1b; }
+        .deadline-danger { color: #dc2626; font-weight: bold; }
+        .deadline-warning { color: #d97706; font-weight: bold; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: white; border-radius: 12px; padding: 30px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+        .modal h3 { margin-top: 0; color: var(--primary-color); }
+        .form-group { margin-bottom: 14px; }
+        .form-row { display: flex; gap: 12px; }
+        .form-row .form-group { flex: 1; }
+        label { display: block; margin-bottom: 5px; font-size: 13px; font-weight: 500; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; box-sizing: border-box; font-size: 13px; background: #f8fafc; }
+        input:focus, select:focus, textarea:focus { border-color: var(--primary-color); outline: none; background: white; }
+        .msg-tip { padding: 10px; border-radius: 6px; font-size: 13px; margin-bottom: 10px; display: none; }
+        .msg-error { background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; }
+        .msg-success { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+        .review-box { background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-top: 8px; font-size: 13px; }
+        .review-box .score { font-size: 18px; font-weight: bold; color: var(--primary-color); }
+        .reminder-banner { background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 12px 16px; margin-bottom: 15px; display: none; }
+        .reminder-banner.active { display: block; }
+        .reminder-item { padding: 6px 0; font-size: 13px; border-bottom: 1px dashed #fde68a; }
+        .reminder-item:last-child { border-bottom: none; }
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="logo">📷 <span>摄影机构</span>管理</div>
+    <div class="menu">
+        <a href="/dashboard">🏠 工作台首页</a>
+        {% if role_name in ['admin', 'staff'] %}
+        <div class="menu-title">学员业务</div>
+        <a href="/student/">📋 学员管理</a>
+        <a href="/course/">📚 课程与班级</a>
+        {% elif role_name == 'teacher' %}
+        <div class="menu-title">教学管理</div>
+        <a href="/course/">📚 课程与班级</a>
+        {% endif %}
+        <div class="menu-title">作品管理</div>
+        <a href="/work/" class="active">🖼️ 作品管理</a>
+        {% if role_name == 'admin' %}
+        <div class="menu-title">系统管理</div>
+        <a href="/admin/users/review">👥 用户管理</a>
+        <a href="/admin/audit">📝 审计日志</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="topbar">
+        <div><strong>当前位置：</strong>作品管理</div>
+        <div class="user-info">
+            <span>你好，<strong>{{ real_name }}</strong></span>
+            {% if role_name == 'admin' %}<span class="role-badge badge-admin">超级管理员</span>
+            {% elif role_name == 'staff' %}<span class="role-badge badge-staff">教务/前台</span>
+            {% elif role_name == 'teacher' %}<span class="role-badge badge-teacher">教师</span>
+            {% else %}<span class="role-badge badge-student">学员</span>{% endif %}
+            <button class="logout-btn" onclick="logout()">退出</button>
+        </div>
+    </div>
+
+    <div class="workspace">
+        <!-- 截止日期提醒 -->
+        <div id="reminderBanner" class="reminder-banner">
+            <strong>⏱️ 作品截止提醒：</strong>
+            <div id="reminderItems"></div>
+        </div>
+
+        <div class="content-box">
+            <div class="toolbar">
+                <span style="font-weight:bold;color:var(--primary-color)">
+                    {% if role_name == 'student' %}我的作品{% elif role_name == 'teacher' %}我班级的作品{% else %}全部作品{% endif %}
+                    &nbsp;<span id="work-count" style="font-size:13px;color:#64748b"></span>
+                </span>
+                {% if role_name == 'student' %}
+                <button class="btn btn-primary" onclick="openModal('submitWorkModal')">📤 提交作品</button>
+                {% endif %}
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        {% if role_name != 'student' %}<th>学员</th>{% endif %}
+                        <th>作品标题</th>
+                        <th>提交时间</th>
+                        <th>截止日期</th>
+                        <th>状态</th>
+                        <th>点评</th>
+                        {% if role_name in ['admin', 'teacher'] %}<th>操作</th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody id="workBody">
+                    <tr><td colspan="8" style="text-align:center;color:#94a3b8">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 提交作品弹窗 (学员) -->
+<div class="modal-overlay" id="submitWorkModal">
+    <div class="modal">
+        <h3>📤 提交作品</h3>
+        <div id="workFormMsg" class="msg-tip"></div>
+        <div class="form-group"><label>作品标题 *</label><input type="text" id="w_title" placeholder="为你的作品起个名字"></div>
+        <div class="form-group"><label>作品描述</label><textarea id="w_desc" rows="3" placeholder="描述拍摄思路、使用设备等"></textarea></div>
+        <div class="form-group"><label>作品链接 (URL)</label><input type="url" id="w_file_url" placeholder="https://...作品图片或网盘链接"></div>
+        <div class="form-group"><label>截止日期 (选填)</label><input type="datetime-local" id="w_deadline"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:15px">
+            <button class="btn btn-secondary" onclick="closeModal('submitWorkModal')">取消</button>
+            <button class="btn btn-primary" onclick="submitWork()">确认提交</button>
+        </div>
+    </div>
+</div>
+
+<!-- 点评弹窗 (教师/管理员) -->
+<div class="modal-overlay" id="reviewWorkModal">
+    <div class="modal">
+        <h3>✏️ 点评作品</h3>
+        <input type="hidden" id="review_work_id">
+        <div id="reviewFormMsg" class="msg-tip"></div>
+        <div id="reviewWorkInfo" style="background:#f8fafc;padding:12px;border-radius:8px;margin-bottom:15px;font-size:13px;"></div>
+        <div class="form-group"><label>评分 (1-100)</label><input type="number" id="r_score" min="1" max="100" placeholder="如: 85"></div>
+        <div class="form-group"><label>点评内容 *</label><textarea id="r_comment" rows="4" placeholder="请填写专业的摄影点评..."></textarea></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:15px">
+            <button class="btn btn-secondary" onclick="closeModal('reviewWorkModal')">取消</button>
+            <button class="btn btn-primary" onclick="submitReview()">提交点评</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const roleName = '{{ role_name }}';
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const map = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'};
+        return String(text).replace(/[&<>"']/g, m => map[m]);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadWorks();
+        loadReminders();
+    });
+
+    function loadWorks() {
+        fetch('/work/api/list').then(r => r.json()).then(res => {
+            const works = res.data || [];
+            document.getElementById('work-count').textContent = `(共 ${works.length} 件)`;
+            const body = document.getElementById('workBody');
+            if (!works.length) {
+                body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#94a3b8">${roleName === 'student' ? '您还没有提交作品' : '暂无作品数据'}</td></tr>`;
+                return;
+            }
+            const statusMap = {submitted: ['已提交', 'status-submitted'], reviewed: ['已点评', 'status-reviewed'], overdue: ['已逾期', 'status-overdue']};
+            body.innerHTML = works.map(w => {
+                const [statusLabel, statusCls] = statusMap[w.status] || [w.status, ''];
+                const studentCell = roleName !== 'student' ? `<td>${escapeHtml(w.student_name)}</td>` : '';
+                const reviewsHtml = w.reviews.length > 0
+                    ? w.reviews.map(r => `<div class="review-box"><span class="score">${r.score ? r.score + '分' : ''}</span> <em>${escapeHtml(r.teacher_name)}</em><p style="margin:5px 0 0">${escapeHtml(r.comment)}</p></div>`).join('')
+                    : '<span style="color:#94a3b8;font-size:12px">暂无点评</span>';
+                const deadlineHtml = w.deadline
+                    ? `<span class="${w.is_overdue ? 'deadline-danger' : ''}">${w.is_overdue ? '🚨' : ''}${escapeHtml(w.deadline)}</span>`
+                    : '-';
+                const actionCell = ['admin', 'teacher'].includes(roleName)
+                    ? `<td><button class="btn btn-review btn-sm" onclick="openReview(${w.id}, '${escapeHtml(w.title)}', '${escapeHtml(w.student_name)}')">点评</button></td>` : '';
+                return `<tr>
+                    <td>#${w.id}</td>
+                    ${studentCell}
+                    <td><strong>${escapeHtml(w.title)}</strong>${w.file_url ? `<br><a href="${escapeHtml(w.file_url)}" target="_blank" style="font-size:11px;color:var(--primary-color)">查看作品 ↗</a>` : ''}</td>
+                    <td>${escapeHtml(w.submitted_at)}</td>
+                    <td>${deadlineHtml}</td>
+                    <td><span class="status-badge ${statusCls}">${statusLabel}</span></td>
+                    <td style="max-width:250px">${reviewsHtml}</td>
+                    ${actionCell}
+                </tr>`;
+            }).join('');
+        });
+    }
+
+    function loadReminders() {
+        fetch('/work/api/reminders').then(r => r.json()).then(res => {
+            const banner = document.getElementById('reminderBanner');
+            const itemsDiv = document.getElementById('reminderItems');
+            if (res.code === 200 && res.data.length > 0) {
+                banner.classList.add('active');
+                itemsDiv.innerHTML = res.data.map(item =>
+                    `<div class="reminder-item" style="color:${item.type === 'danger' ? '#dc2626' : '#d97706'}">${item.type === 'danger' ? '🚨' : '⏱️'} ${escapeHtml(item.msg)}</div>`
+                ).join('');
+            }
+        });
+    }
+
+    function openModal(id) { document.getElementById(id).classList.add('active'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+    function openReview(workId, title, studentName) {
+        document.getElementById('review_work_id').value = workId;
+        document.getElementById('reviewWorkInfo').innerHTML = `<strong>作品：</strong>${escapeHtml(title)}<br><strong>学员：</strong>${escapeHtml(studentName)}`;
+        document.getElementById('r_score').value = '';
+        document.getElementById('r_comment').value = '';
+        openModal('reviewWorkModal');
+    }
+
+    function submitWork() {
+        const body = {
+            title: document.getElementById('w_title').value,
+            description: document.getElementById('w_desc').value,
+            file_url: document.getElementById('w_file_url').value,
+            deadline: document.getElementById('w_deadline').value || null
+        };
+        postJSON('/work/api/submit', body, res => {
+            if (res.code === 200) { closeModal('submitWorkModal'); loadWorks(); loadReminders(); }
+            else showMsgTip('workFormMsg', res.msg, 'error');
+        });
+    }
+
+    function submitReview() {
+        const body = {
+            work_id: document.getElementById('review_work_id').value,
+            score: document.getElementById('r_score').value || null,
+            comment: document.getElementById('r_comment').value
+        };
+        postJSON('/work/api/review', body, res => {
+            if (res.code === 200) { closeModal('reviewWorkModal'); loadWorks(); }
+            else showMsgTip('reviewFormMsg', res.msg, 'error');
+        });
+    }
+
+    function showMsgTip(id, msg, type) {
+        const el = document.getElementById(id);
+        el.textContent = msg; el.className = 'msg-tip msg-' + type; el.style.display = 'block';
+    }
+
+    function postJSON(url, data, callback) {
+        fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}, body: JSON.stringify(data)})
+            .then(r => r.json()).then(callback).catch(e => alert('请求失败: ' + e));
+    }
+
+    function logout() {
+        fetch('/api/logout', {method: 'POST', headers: {'X-CSRFToken': csrfToken}}).then(() => window.location.href = '/login');
+    }
+</script>
+</body>
+</html>

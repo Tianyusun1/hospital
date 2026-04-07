@@ -2,70 +2,46 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>系统审计日志 - 医疗设备管理系统</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>审计日志 - 摄影机构管理系统</title>
     <style>
-        :root {
-            --primary-color: #059669; /* 医疗绿 */
-            --bg-color: #f1f5f9;
-            --text-main: #334155;
-            --border-color: #e2e8f0;
-            --warning-bg: #fff7ed;   /* 风险等级1：橙色背景 */
-            --warning-text: #9a3412;
-            --danger-bg: #fef2f2;    /* 风险等级2：红色背景 */
-            --danger-text: #991b1b;
-        }
+        :root { --primary-color: #059669; --bg-color: #f1f5f9; --text-main: #334155; --border-color: #e2e8f0; --warning-bg: #fff7ed; --warning-text: #9a3412; --danger-bg: #fef2f2; --danger-text: #991b1b; }
         body { font-family: 'PingFang SC', sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .header h2 { margin: 0; color: var(--primary-color); display: flex; align-items: center; gap: 10px; }
-
-        /* 筛选栏 */
-        .filter-bar { background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 15px; align-items: flex-end; border: 1px solid var(--border-color); }
+        .header h2 { margin: 0; color: var(--primary-color); }
+        .filter-bar { background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 15px; align-items: flex-end; border: 1px solid var(--border-color); flex-wrap: wrap; }
         .filter-group { display: flex; flex-direction: column; gap: 5px; }
         .filter-group label { font-size: 12px; font-weight: bold; color: #64748b; }
         .filter-bar input, .filter-bar select { padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
         .btn-query { background: var(--primary-color); color: white; border: none; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-
-        /* 标签页切换 */
         .tabs { display: flex; gap: 5px; margin-bottom: -1px; position: relative; z-index: 1; }
         .tab { padding: 10px 20px; background: #e2e8f0; border: 1px solid var(--border-color); border-bottom: none; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 14px; font-weight: bold; color: #64748b; }
         .tab.active { background: white; color: var(--primary-color); border-top: 3px solid var(--primary-color); }
-
-        /* 表格样式 */
         .table-container { border: 1px solid var(--border-color); border-radius: 0 0 8px 8px; overflow: hidden; }
         table { width: 100%; border-collapse: collapse; background: white; }
         th, td { padding: 14px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 13px; }
         th { background-color: #f8fafc; color: #64748b; }
-
-        /* 风险行样式 */
         .row-warning { background-color: var(--warning-bg) !important; color: var(--warning-text); }
         .row-danger { background-color: var(--danger-bg) !important; color: var(--danger-text); font-weight: bold; }
-
-        /* 状态与风险标签 */
         .risk-badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-left: 5px; font-weight: bold; }
         .badge-1 { background: #fb923c; color: white; }
         .badge-2 { background: #ef4444; color: white; }
-
         .status-badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-        .status-safe { background: #dcfce7; color: #166534; }    /* 安全/正常 */
-        .status-warning { background: #ffedd5; color: #9a3412; } /* 中风险 */
-        .status-danger { background: #fee2e2; color: #991b1b; }  /* 高风险 */
-
-        /* 动作文字颜色 */
+        .status-safe { background: #dcfce7; color: #166534; }
+        .status-warning { background: #ffedd5; color: #9a3412; }
+        .status-danger { background: #fee2e2; color: #991b1b; }
         .action-safe { color: var(--primary-color); font-weight: bold; }
         .action-warn { color: #c2410c; font-weight: bold; }
         .action-danger { color: #b91c1c; font-weight: bold; }
-
         small.risk-desc { display: block; color: #ef4444; margin-top: 4px; font-style: italic; }
     </style>
 </head>
 <body>
-
 <div class="container">
     <div class="header">
         <h2>📝 审计与系统日志</h2>
-        <a href="/dashboard" style="text-decoration: none; color: var(--primary-color); font-weight: bold;">返回工作台</a>
+        <a href="/dashboard" style="text-decoration:none;color:var(--primary-color);font-weight:bold">返回工作台</a>
     </div>
 
     <div class="filter-bar">
@@ -77,8 +53,8 @@
             <label>起始日期</label>
             <input type="date" id="filter_date">
         </div>
-        <div class="filter-group" id="risk_filter_group" style="display:none;">
-            <label>风险等级筛选</label>
+        <div class="filter-group" id="risk_filter_group" style="display:none">
+            <label>风险等级</label>
             <select id="filter_risk_level">
                 <option value="">全部记录</option>
                 <option value="0">正常记录</option>
@@ -90,7 +66,7 @@
     </div>
 
     <div class="tabs">
-        <div class="tab active" id="tab_borrow" onclick="switchTab('borrow')">设备借还流水</div>
+        <div class="tab active" id="tab_audit" onclick="switchTab('audit')">业务操作记录</div>
         <div class="tab" id="tab_sys" onclick="switchTab('sys')">系统审计日志</div>
     </div>
 
@@ -103,13 +79,12 @@
 </div>
 
 <script>
-    let currentTab = 'borrow';
+    let currentTab = 'audit';
 
-    // XSS 防护：HTML 转义函数
     function escapeHtml(text) {
         if (!text) return '';
-        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-        return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
+        const map = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'};
+        return String(text).replace(/[&<>"']/g, m => map[m]);
     }
 
     document.addEventListener('DOMContentLoaded', loadData);
@@ -117,7 +92,7 @@
     function switchTab(tab) {
         currentTab = tab;
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.getElementById(`tab_${tab}`).classList.add('active');
+        document.getElementById('tab_' + tab).classList.add('active');
         document.getElementById('risk_filter_group').style.display = (tab === 'sys' ? 'flex' : 'none');
         loadData();
     }
@@ -126,109 +101,63 @@
         const userId = document.getElementById('filter_user_id').value;
         const date = document.getElementById('filter_date').value;
         const riskLevel = document.getElementById('filter_risk_level').value;
-
-        if (currentTab === 'borrow') {
-            fetchBorrowLogs();
-        } else {
-            fetchSysLogs(userId, date, riskLevel);
-        }
+        if (currentTab === 'audit') fetchAuditLogs();
+        else fetchSysLogs(userId, date, riskLevel);
     }
 
-    function fetchBorrowLogs() {
+    function fetchAuditLogs() {
         fetch('/admin/api/audit/list')
-            .then(res => res.json())
-            .then(res => { if(res.code === 200) renderBorrowTable(res.data); });
+            .then(r => r.json())
+            .then(res => { if (res.code === 200) renderAuditTable(res.data); });
     }
 
     function fetchSysLogs(userId, date, riskLevel) {
-        // 使用之前的后端优化接口：支持 username 搜索及风险过滤
         let url = `/admin/api/sys_logs/list?user_id=${userId}&start_date=${date}&risk_level=${riskLevel}`;
-        fetch(url)
-            .then(res => res.json())
-            .then(res => { if(res.code === 200) renderSysTable(res.data); });
+        fetch(url).then(r => r.json()).then(res => { if (res.code === 200) renderSysTable(res.data); });
     }
 
-    function renderBorrowTable(data) {
+    function renderAuditTable(data) {
         const head = document.getElementById('tableHead');
         const body = document.getElementById('tableBody');
-
-        head.innerHTML = `
+        head.innerHTML = `<tr><th>ID</th><th>时间</th><th>操作人</th><th>动作</th><th>操作目标</th><th>IP</th></tr>`;
+        if (!data.length) { body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8">暂无业务操作记录</td></tr>'; return; }
+        body.innerHTML = data.map(r => `
             <tr>
-                <th>记录ID</th>
-                <th>设备名称</th>
-                <th>借用人</th>
-                <th>所属科室</th>
-                <th>借出时间</th>
-                <th>归还时间</th>
-                <th>当前状态</th>
-            </tr>
-        `;
-
-        body.innerHTML = data.map(log => `
-            <tr>
-                <td>#${log.id}</td>
-                <td><strong>${escapeHtml(log.equipment_name)}</strong><br><small>${escapeHtml(log.serial_number)}</small></td>
-                <td>${escapeHtml(log.user_name)}</td>
-                <td>${escapeHtml(log.department)}</td>
-                <td>${log.borrow_time}</td>
-                <td>${log.return_time || '--'}</td>
-                <td>
-                    <span class="status-badge ${log.status === '借用中' ? 'status-danger' : 'status-safe'}">
-                        ${escapeHtml(log.status)}
-                    </span>
-                </td>
-            </tr>
-        `).join('');
+                <td>#${r.id}</td>
+                <td>${escapeHtml(r.time)}</td>
+                <td><strong>${escapeHtml(r.operator)}</strong><br><small style="color:#64748b">${escapeHtml(r.operator_name)}</small></td>
+                <td style="color:var(--primary-color);font-weight:bold">${escapeHtml(r.action)}</td>
+                <td>${escapeHtml(r.target) || '-'}</td>
+                <td><code>${escapeHtml(r.ip) || 'Local'}</code></td>
+            </tr>`).join('');
     }
 
     function renderSysTable(data) {
         const head = document.getElementById('tableHead');
         const body = document.getElementById('tableBody');
-
-        head.innerHTML = `
-            <tr>
-                <th>日志ID</th>
-                <th>操作时间</th>
-                <th>操作账号</th>
-                <th>动作行为</th>
-                <th>操作目标/备注</th>
-                <th>风险判定</th>
-                <th>终端IP</th>
-            </tr>
-        `;
-
+        head.innerHTML = `<tr><th>日志ID</th><th>操作时间</th><th>操作账号</th><th>动作行为</th><th>操作目标/备注</th><th>风险判定</th><th>终端IP</th></tr>`;
+        if (!data.length) { body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8">暂无日志记录</td></tr>'; return; }
         body.innerHTML = data.map(log => {
-            let rowClass = '';
-            let riskBadge = '';
-            let actionClass = 'action-safe';
+            let rowClass = '', riskBadge = '', actionClass = 'action-safe';
             let riskStatusLabel = '<span class="status-badge status-safe">🛡️ 安全</span>';
-
             if (log.risk_level === 1) {
-                rowClass = 'row-warning';
-                actionClass = 'action-warn';
+                rowClass = 'row-warning'; actionClass = 'action-warn';
                 riskBadge = '<span class="risk-badge badge-1">异常时间</span>';
                 riskStatusLabel = '<span class="status-badge status-warning">中风险</span>';
             } else if (log.risk_level === 2) {
-                rowClass = 'row-danger';
-                actionClass = 'action-danger';
+                rowClass = 'row-danger'; actionClass = 'action-danger';
                 riskBadge = '<span class="risk-badge badge-2">高危行为</span>';
                 riskStatusLabel = '<span class="status-badge status-danger">高风险</span>';
             }
-
-            return `
-                <tr class="${rowClass}">
-                    <td>#${log.id}</td>
-                    <td>${log.time}</td>
-                    <td><strong>${escapeHtml(log.operator)}</strong></td>
-                    <td><span class="${actionClass}">${escapeHtml(log.action)}</span>${riskBadge}</td>
-                    <td>
-                        ${escapeHtml(log.target) || '--'}
-                        ${log.risk_msg ? `<small class="risk-desc">⚠️ ${escapeHtml(log.risk_msg)}</small>` : ''}
-                    </td>
-                    <td>${riskStatusLabel}</td>
-                    <td><code>${escapeHtml(log.ip) || 'Local'}</code></td>
-                </tr>
-            `;
+            return `<tr class="${rowClass}">
+                <td>#${log.id}</td>
+                <td>${log.time}</td>
+                <td><strong>${escapeHtml(log.operator)}</strong></td>
+                <td><span class="${actionClass}">${escapeHtml(log.action)}</span>${riskBadge}</td>
+                <td>${escapeHtml(log.target) || '--'}${log.risk_msg ? `<small class="risk-desc">⚠️ ${escapeHtml(log.risk_msg)}</small>` : ''}</td>
+                <td>${riskStatusLabel}</td>
+                <td><code>${escapeHtml(log.ip) || 'Local'}</code></td>
+            </tr>`;
         }).join('');
     }
 </script>

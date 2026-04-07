@@ -1,23 +1,20 @@
-# 文件位置：app/routes/auth.py
 from flask import Blueprint, request, jsonify, session, render_template, redirect, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from app.models.user import User, Role
 from app.models.log import SysLog
 from app.extensions import db
 from app.utils.security import check_operation_risk
-# --- 【核心新增】：导入 joinedload 优化关联查询 ---
 from sqlalchemy.orm import joinedload
 
 auth_bp = Blueprint('auth', __name__)
 
 
-# --- 【核心新增】：获取真实 IP 辅助函数 ---
 def get_real_ip():
-    """获取客户端真实 IP 地址，防代理穿透"""
     return request.headers.get('X-Forwarded-For', request.remote_addr)
 
 
-# ================= 登录相关 =================
+# ================= 登录 =================
+
 @auth_bp.route('/login', methods=['GET'])
 def login_page():
     if 'user_id' in session:
@@ -34,65 +31,53 @@ def api_login():
     if not username or not password:
         return jsonify({'code': 400, 'msg': '账号或密码不能为空'})
 
-    # 【性能优化】：使用 joinedload 提前查出 Role 表，避免访问 user.role 时触发二次查询
     user = User.query.options(joinedload(User.role)).filter_by(username=username).first()
 
     if user is None:
-        return jsonify({'code': 401, 'msg': '该工号不存在，请先注册'})
+        return jsonify({'code': 401, 'msg': '该账号不存在，请先注册'})
 
-    # --- 【新增】：检查账号是否被安全锁定 ---
     if user.is_locked:
-        return jsonify({'code': 403, 'msg': '账号因多次输入错误已被安全锁定，请联系超级管理员解锁'})
+        return jsonify({'code': 403, 'msg': '账号因多次输入错误已被安全锁定，请联系管理员解锁'})
 
-    # 检查账号状态 (RBAC 核心逻辑)
     if user.status == 'pending':
         return jsonify({'code': 403, 'msg': '账号正在等待管理员审核，请耐心等待'})
     elif user.status == 'rejected':
-        return jsonify({'code': 403, 'msg': '账号审核未通过，请联系信息科'})
+        return jsonify({'code': 403, 'msg': '账号审核未通过，请联系管理员'})
 
-    # 验证密码
     if check_password_hash(user.password_hash, password):
-        # --- 【新增】：登录成功，重置失败次数 ---
         user.failed_login_attempts = 0
         db.session.commit()
 
-        # 1. 设置 Session 保持登录状态
         session['user_id'] = user.id
         session['username'] = user.username
         session['real_name'] = user.real_name
         session['role_id'] = user.role_id
-        # 【核心修复】：将会话中存入 role_name，配合后续通过字符串判断管理员权限的安全策略
-        session['role_name'] = user.role.role_name if user.role else 'user'
+        session['role_name'] = user.role.role_name if user.role else 'student'
 
-        # --- 进行行为安全检测 ---
         risk_level, risk_msg = check_operation_risk()
-
-        # 2. 记录登录审计日志（带风险判定）
         new_log = SysLog(
             user_id=user.id,
             action='登录',
-            target=f"工号: {user.username}",
-            ip_address=get_real_ip(),  # 【安全修复】：使用真实 IP
+            target=f"账号: {user.username}",
+            ip_address=get_real_ip(),
             risk_level=risk_level,
             risk_msg=risk_msg
         )
         db.session.add(new_log)
         db.session.commit()
-
         return jsonify({'code': 200, 'msg': '登录成功'})
     else:
-        # --- 【新增】：密码错误，累计失败次数并判定是否锁定 ---
         user.failed_login_attempts += 1
         if user.failed_login_attempts >= 5:
             user.is_locked = True
             db.session.commit()
             return jsonify({'code': 401, 'msg': '密码连续错误5次，账号已被安全锁定！'})
-
         db.session.commit()
         return jsonify({'code': 401, 'msg': f'密码错误！连续错误5次将锁定，还剩 {5 - user.failed_login_attempts} 次机会'})
 
 
-# ================= 注册相关 =================
+# ================= 注册 =================
+
 @auth_bp.route('/register', methods=['GET'])
 def register_page():
     return render_template('register.html')
@@ -104,28 +89,23 @@ def api_register():
     username = data.get('username')
     password = data.get('password')
     real_name = data.get('real_name')
-    department = data.get('department')
+    department = data.get('department', '学员')
     phone = data.get('phone')
 
-    # --- 【新增】：获取前端传来的申请角色，默认值为普通医护人员 'user' ---
-    requested_role_name = data.get('role_name', 'user')
+    # Only 'student' role is allowed for self-registration
+    requested_role_name = data.get('role_name', 'student')
+    if requested_role_name != 'student':
+        requested_role_name = 'student'
 
-    # 简单的输入验证
-    if not all([username, password, real_name, department]):
+    if not all([username, password, real_name]):
         return jsonify({'code': 400, 'msg': '请填写所有必填项'})
 
     if User.query.filter_by(username=username).first():
-        return jsonify({'code': 400, 'msg': '该工号已注册，请直接登录或联系管理员'})
-
-    # --- 【新增】：验证申请的角色是否合法，不合法则降级为 user ---
-    if requested_role_name not in ['user', 'equipment_manager']:
-        requested_role_name = 'user'
+        return jsonify({'code': 400, 'msg': '该账号已注册，请直接登录'})
 
     target_role = Role.query.filter_by(role_name=requested_role_name).first()
-
-    # 如果数据库此时还没初始化该角色，容错处理
     if not target_role:
-        target_role = Role(role_name=requested_role_name, description='系统角色')
+        target_role = Role(role_name=requested_role_name, description='学员')
         db.session.add(target_role)
         db.session.commit()
 
@@ -136,41 +116,38 @@ def api_register():
         real_name=real_name,
         department=department,
         phone=phone,
-        role_id=target_role.id,  # 【修改】：分配用户申请对应的角色
+        role_id=target_role.id,
         status='pending'
     )
-
-    # 【逻辑修复】：先 commit() 将用户存入数据库，这样才能拿到自增的 new_user.id
     db.session.add(new_user)
     db.session.commit()
 
-    # 记录注册行为日志（带上刚刚生成的用户 ID）
     r_risk_level, r_risk_msg = check_operation_risk()
     reg_log = SysLog(
-        user_id=new_user.id,  # 【核心修复】：精准绑定操作人为刚注册的用户
+        user_id=new_user.id,
         action='用户注册',
-        target=f"工号: {username}, 申请角色: {requested_role_name}",  # 日志里带上申请的角色
-        ip_address=get_real_ip(),  # 【安全修复】：使用真实 IP
+        target=f"账号: {username}, 角色: {requested_role_name}",
+        ip_address=get_real_ip(),
         risk_level=r_risk_level,
         risk_msg=r_risk_msg
     )
     db.session.add(reg_log)
     db.session.commit()
 
-    return jsonify({'code': 200, 'msg': '注册提交成功，请等待管理员审核'})
+    return jsonify({'code': 200, 'msg': '注册提交成功，请等待管理员审核后登录'})
 
 
-# ================= 其他 =================
+# ================= 退出 & 工作台 =================
+
 @auth_bp.route('/api/logout', methods=['POST'])
 def api_logout():
     if 'user_id' in session:
-        # 退出也进行时间风险检测
         l_risk_level, l_risk_msg = check_operation_risk()
         logout_log = SysLog(
             user_id=session['user_id'],
             action='退出',
-            target=f"工号: {session['username']}",
-            ip_address=get_real_ip(),  # 【安全修复】：使用真实 IP
+            target=f"账号: {session['username']}",
+            ip_address=get_real_ip(),
             risk_level=l_risk_level,
             risk_msg=l_risk_msg
         )
@@ -185,8 +162,7 @@ def api_logout():
 def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('auth.login_page'))
-
     return render_template('dashboard.html',
                            real_name=session.get('real_name', session.get('username')),
                            role_id=session.get('role_id'),
-                           role_name=session.get('role_name'))  # 模板中可能也需要用到角色名
+                           role_name=session.get('role_name'))

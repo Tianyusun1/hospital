@@ -8,7 +8,7 @@ class Config:
 
     # MySQL 数据库连接配置 (请把 root:123456 换成你本机的数据库账号密码)
     # 格式: mysql+pymysql://用户名:密码@主机地址:端口/数据库名
-    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:123456@localhost/medical_sys'
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:123456@localhost/photo_sys'
 
     # 关闭对模型修改的跟踪，提升性能
     SQLALCHEMY_TRACK_MODIFICATIONS = False

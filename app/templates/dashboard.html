@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>医疗设备借还管理系统 - 工作台</title>
+    <title>摄影机构学员管理系统 - 工作台</title>
     <style>
         :root {
             --primary-color: #059669;
@@ -16,226 +16,58 @@
             --danger-color: #ef4444;
             --warning-color: #f59e0b;
         }
-
-        body {
-            font-family: 'PingFang SC', sans-serif;
-            margin: 0;
-            display: flex;
-            height: 100vh;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-        }
-
-        /* 左侧侧边栏 */
-        .sidebar {
-            width: 250px;
-            background-color: var(--sidebar-bg);
-            color: white;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
-        }
-
-        .logo {
-            padding: 20px;
-            text-align: center;
-            font-size: 20px;
-            font-weight: bold;
-            background-color: #0f172a;
-            letter-spacing: 1px;
-            border-bottom: 1px solid #334155;
-        }
-
-        .logo span {
-            color: var(--primary-color);
-        }
-
-        .menu {
-            flex: 1;
-            padding: 20px 0;
-            overflow-y: auto;
-        }
-
-        .menu a {
-            display: block;
-            padding: 15px 25px;
-            color: #cbd5e1;
-            text-decoration: none;
-            font-size: 15px;
-            transition: all 0.3s;
-            border-left: 4px solid transparent;
-        }
-
-        .menu a:hover, .menu a.active {
-            background-color: var(--sidebar-hover);
-            color: white;
-            border-left-color: var(--primary-color);
-        }
-
-        .menu-title {
-            padding: 10px 25px;
-            font-size: 12px;
-            color: #64748b;
-            text-transform: uppercase;
-            margin-top: 15px;
-        }
-
-        /* 右侧主体区域 */
-        .main-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        /* 顶部导航条 */
-        .topbar {
-            height: 60px;
-            background-color: white;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 30px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-        }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .role-badge {
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: bold;
-        }
-
-        /* 三种角色的颜色定义 */
-        .badge-admin {
-            background-color: var(--primary-light);
-            color: var(--primary-color);
-        }
-
-        .badge-manager {
-            background-color: #fef08a;
-            color: #854d0e;
-        }
-
-        .badge-user {
-            background-color: #e0f2fe;
-            color: #0284c7;
-        }
-
-        .logout-btn {
-            background-color: transparent;
-            border: 1px solid #e2e8f0;
-            padding: 6px 15px;
-            border-radius: 6px;
-            cursor: pointer;
-            color: #64748b;
-            transition: all 0.2s;
-        }
-
-        .logout-btn:hover {
-            background-color: #f8fafc;
-            color: #ef4444;
-            border-color: #ef4444;
-        }
-
-        /* 报警横幅通用样式 */
-        .alert-banner {
-            display: none;
-            padding: 12px 25px;
-            margin: 20px 30px 0 30px;
-            border-radius: 8px;
-            font-weight: bold;
-            align-items: center;
-            gap: 10px;
-        }
-
-        /* 管理员红色报警 */
-        .banner-danger {
-            background-color: #fef2f2;
-            border: 1px solid #fee2e2;
-            color: var(--danger-color);
-            animation: pulse 2s infinite;
-        }
-
-        /* 个人归还黄色提醒 */
-        .banner-warning {
-            background-color: #fffbeb;
-            border: 1px solid #fef3c7;
-            color: #d97706;
-        }
-
-        @keyframes pulse {
-            0% {
-                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
-            }
-            70% {
-                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
-            }
-            100% {
-                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
-            }
-        }
-
-        /* 工作区内容 */
-        .workspace {
-            padding: 30px;
-            flex: 1;
-            overflow-y: auto;
-        }
-
-        .welcome-card {
-            background: white;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-            text-align: center;
-        }
-
-        .welcome-card h1 {
-            color: var(--primary-color);
-            margin-top: 0;
-        }
-
-        .welcome-card p {
-            color: #64748b;
-            font-size: 16px;
-            line-height: 1.6;
-        }
-
-        .reminder-list {
-            margin-top: 25px;
-            text-align: left;
-            border-top: 1px dashed #e2e8f0;
-            padding-top: 20px;
-            display: none;
-        }
-
-        .reminder-item {
-            padding: 10px 15px;
-            border-radius: 6px;
-            margin-bottom: 8px;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+        body { font-family: 'PingFang SC', sans-serif; margin: 0; display: flex; height: 100vh; background-color: var(--bg-color); color: var(--text-main); }
+        .sidebar { width: 250px; background-color: var(--sidebar-bg); color: white; display: flex; flex-direction: column; box-shadow: 2px 0 5px rgba(0,0,0,0.1); }
+        .logo { padding: 20px; text-align: center; font-size: 18px; font-weight: bold; background-color: #0f172a; letter-spacing: 1px; border-bottom: 1px solid #334155; }
+        .logo span { color: var(--primary-color); }
+        .menu { flex: 1; padding: 20px 0; overflow-y: auto; }
+        .menu a { display: block; padding: 15px 25px; color: #cbd5e1; text-decoration: none; font-size: 15px; transition: all 0.3s; border-left: 4px solid transparent; }
+        .menu a:hover, .menu a.active { background-color: var(--sidebar-hover); color: white; border-left-color: var(--primary-color); }
+        .menu-title { padding: 10px 25px; font-size: 12px; color: #64748b; text-transform: uppercase; margin-top: 15px; }
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .topbar { height: 60px; background-color: white; display: flex; justify-content: space-between; align-items: center; padding: 0 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .user-info { display: flex; align-items: center; gap: 15px; }
+        .role-badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .badge-admin { background-color: var(--primary-light); color: var(--primary-color); }
+        .badge-staff { background-color: #fef08a; color: #854d0e; }
+        .badge-teacher { background-color: #e0f2fe; color: #0284c7; }
+        .badge-student { background-color: #f3e8ff; color: #7c3aed; }
+        .logout-btn { background-color: transparent; border: 1px solid #e2e8f0; padding: 6px 15px; border-radius: 6px; cursor: pointer; color: #64748b; transition: all 0.2s; }
+        .logout-btn:hover { background-color: #f8fafc; color: #ef4444; border-color: #ef4444; }
+        .alert-banner { display: none; padding: 12px 25px; margin: 20px 30px 0 30px; border-radius: 8px; font-weight: bold; align-items: center; gap: 10px; }
+        .banner-danger { background-color: #fef2f2; border: 1px solid #fee2e2; color: var(--danger-color); animation: pulse 2s infinite; }
+        .banner-warning { background-color: #fffbeb; border: 1px solid #fef3c7; color: #d97706; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); } 70% { box-shadow: 0 0 0 10px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
+        .workspace { padding: 30px; flex: 1; overflow-y: auto; }
+        .welcome-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align: center; }
+        .welcome-card h1 { color: var(--primary-color); margin-top: 0; }
+        .welcome-card p { color: #64748b; font-size: 16px; line-height: 1.6; }
+        .reminder-list { margin-top: 25px; text-align: left; border-top: 1px dashed #e2e8f0; padding-top: 20px; display: none; }
+        .reminder-item { padding: 10px 15px; border-radius: 6px; margin-bottom: 8px; font-size: 14px; display: flex; align-items: center; gap: 10px; }
+        .quick-links { display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; margin-top: 25px; }
+        .quick-link-btn { padding: 12px 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; text-decoration: none; color: var(--text-main); font-size: 14px; transition: all 0.2s; }
+        .quick-link-btn:hover { background: var(--primary-light); border-color: var(--primary-color); color: var(--primary-color); }
     </style>
 </head>
 <body>
-
 <div class="sidebar">
-    <div class="logo">✚ 医疗设备<span>管理系统</span></div>
+    <div class="logo">📷 <span>摄影机构</span>管理系统</div>
     <div class="menu">
         <a href="/dashboard" class="active">🏠 工作台首页</a>
 
-        <div class="menu-title">业务操作</div>
-        <a href="/equipment/">📦 设备管理 (录入/借还)</a>
+        {% if role_name in ['admin', 'staff'] %}
+        <div class="menu-title">学员业务</div>
+        <a href="/student/">📋 学员管理</a>
+        <a href="/student/">💰 报名与缴费</a>
+        {% endif %}
+
+        {% if role_name in ['admin', 'staff', 'teacher'] %}
+        <div class="menu-title">教学管理</div>
+        <a href="/course/">📚 课程与班级</a>
+        {% endif %}
+
+        <div class="menu-title">作品管理</div>
+        <a href="/work/">🖼️ 作品管理</a>
 
         {% if role_name == 'admin' %}
         <div class="menu-title">系统管理 (管理员专属)</div>
@@ -247,20 +79,18 @@
 
 <div class="main-content">
     <div class="topbar">
-        <div>
-            <strong>当前位置：</strong>工作台首页
-        </div>
+        <div><strong>当前位置：</strong>工作台首页</div>
         <div class="user-info">
             <span>你好，<strong>{{ real_name }}</strong></span>
-
             {% if role_name == 'admin' %}
             <span class="role-badge badge-admin">超级管理员</span>
-            {% elif role_name == 'equipment_manager' %}
-            <span class="role-badge badge-manager">设备管理员</span>
+            {% elif role_name == 'staff' %}
+            <span class="role-badge badge-staff">教务/前台</span>
+            {% elif role_name == 'teacher' %}
+            <span class="role-badge badge-teacher">教师</span>
             {% else %}
-            <span class="role-badge badge-user">医护人员</span>
+            <span class="role-badge badge-student">学员</span>
             {% endif %}
-
             <button class="logout-btn" onclick="logout()">安全退出</button>
         </div>
     </div>
@@ -274,25 +104,41 @@
     {% endif %}
 
     <div id="user-reminder-banner" class="alert-banner banner-warning">
-        <span>⏱️ 归还提醒：</span>
-        <span id="reminder-summary">您有设备即将到期或已逾期，请及时处理。</span>
-        <a href="/equipment/" style="color: #d97706; margin-left: auto;">前往设备中心 &raquo;</a>
+        <span>⏱️ 作品提醒：</span>
+        <span id="reminder-summary">您有作品即将截止或已逾期，请及时处理。</span>
+        <a href="/work/" style="color: #d97706; margin-left: auto;">前往作品管理 &raquo;</a>
     </div>
 
     <div class="workspace">
         <div class="welcome-card">
-            <h1>欢迎使用医疗设备借还管理系统</h1>
+            <h1>欢迎使用摄影机构学员管理系统</h1>
             <p>
                 系统遵循严格的 <strong>RBAC 权限标准</strong> 进行访问控制。<br>
                 您可以在左侧菜单中选择需要办理的业务。所有的操作记录均会被系统严格审计与保护。
             </p>
 
+            <div class="quick-links">
+                {% if role_name in ['admin', 'staff'] %}
+                <a href="/student/" class="quick-link-btn">📋 学员档案管理</a>
+                <a href="/course/" class="quick-link-btn">📚 课程与班级</a>
+                {% endif %}
+                {% if role_name in ['admin', 'staff', 'teacher'] %}
+                <a href="/work/" class="quick-link-btn">🖼️ 作品点评</a>
+                {% endif %}
+                {% if role_name == 'student' %}
+                <a href="/student/" class="quick-link-btn">👤 我的档案</a>
+                <a href="/work/" class="quick-link-btn">🖼️ 我的作品</a>
+                {% endif %}
+                {% if role_name == 'admin' %}
+                <a href="/admin/users/review" class="quick-link-btn">👥 用户审核</a>
+                <a href="/admin/audit" class="quick-link-btn">📝 系统日志</a>
+                {% endif %}
+            </div>
+
             <div id="user-reminder-list" class="reminder-list">
                 <h4 style="margin-top: 0; color: var(--text-main);">📌 您的待办提醒：</h4>
                 <div id="reminder-items-container"></div>
             </div>
-
-            <p id="user-notification" style="font-size: 14px; margin-top: 20px; color: #059669;"></p>
         </div>
     </div>
 </div>
@@ -301,67 +147,64 @@
     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
     document.addEventListener('DOMContentLoaded', () => {
-        checkUserReminders();
-
-        // 【修改】：仅超级管理员需要定时拉取异常警报
+        checkWorkReminders();
         {% if role_name == 'admin' %}
         checkSystemAlerts();
         setInterval(checkSystemAlerts, 300000);
         {% endif %}
     });
 
-    function checkUserReminders() {
-        fetch('/equipment/api/reminders')
-                .then(res => res.json())
-                .then(res => {
-                    const banner = document.getElementById('user-reminder-banner');
-                    const listDiv = document.getElementById('user-reminder-list');
-
-                    if (res.code === 200 && res.data.length > 0) {
-                        banner.style.display = 'flex';
-                        document.getElementById('reminder-summary').innerText = `您当前有 ${res.data.length} 台设备需要注意归还时间。`;
-
-                        const container = document.getElementById('reminder-items-container');
-                        listDiv.style.display = 'block';
-
-                        container.innerHTML = res.data.map(item => `
-                            <div class="reminder-item" style="background-color: ${item.type === 'danger' ? '#fef2f2' : '#fffbeb'}; border: 1px solid ${item.type === 'danger' ? '#fee2e2' : '#fef3c7'};">
-                                <span>${item.type === 'danger' ? '🚨' : '⏱️'}</span>
-                                <span style="color: ${item.type === 'danger' ? '#991b1b' : '#92400e'}">${item.msg}</span>
-                            </div>
-                        `).join('');
-                    } else {
-                        banner.style.display = 'none';
-                        listDiv.style.display = 'none';
-                    }
-                })
-                .catch(err => console.error("个人提醒检查失败:", err));
+    function checkWorkReminders() {
+        fetch('/work/api/reminders')
+            .then(res => res.json())
+            .then(res => {
+                const banner = document.getElementById('user-reminder-banner');
+                const listDiv = document.getElementById('user-reminder-list');
+                if (res.code === 200 && res.data.length > 0) {
+                    banner.style.display = 'flex';
+                    document.getElementById('reminder-summary').innerText = `您当前有 ${res.data.length} 个作品需要关注。`;
+                    const container = document.getElementById('reminder-items-container');
+                    listDiv.style.display = 'block';
+                    container.innerHTML = res.data.map(item => `
+                        <div class="reminder-item" style="background-color: ${item.type === 'danger' ? '#fef2f2' : '#fffbeb'}; border: 1px solid ${item.type === 'danger' ? '#fee2e2' : '#fef3c7'};">
+                            <span>${item.type === 'danger' ? '🚨' : '⏱️'}</span>
+                            <span style="color: ${item.type === 'danger' ? '#991b1b' : '#92400e'}">${escapeHtml(item.msg)}</span>
+                        </div>
+                    `).join('');
+                } else {
+                    banner.style.display = 'none';
+                    listDiv.style.display = 'none';
+                }
+            })
+            .catch(err => console.error("提醒检查失败:", err));
     }
 
     {% if role_name == 'admin' %}
     function checkSystemAlerts() {
         fetch('/admin/api/sys_logs/alerts')
-                .then(res => res.json())
-                .then(res => {
-                    const banner = document.getElementById('system-alert-banner');
-                    if (res.code === 200 && (res.warning_total > 0 || res.danger_total > 0)) {
-                        const content = document.getElementById('alert-content');
-                        banner.style.display = 'flex';
-                        content.innerText = `过去24小时内系统记录了 ${res.warning_total} 项异常行为（其中 ${res.danger_total} 项为严重预警），请及时审计。`;
-                    } else if (banner) {
-                        banner.style.display = 'none';
-                    }
-                })
-                .catch(err => console.error("警报检查失败:", err));
+            .then(res => res.json())
+            .then(res => {
+                const banner = document.getElementById('system-alert-banner');
+                if (res.code === 200 && (res.warning_total > 0 || res.danger_total > 0)) {
+                    banner.style.display = 'flex';
+                    document.getElementById('alert-content').innerText = `过去24小时内系统记录了 ${res.warning_total} 项异常行为（其中 ${res.danger_total} 项为严重预警），请及时审计。`;
+                } else if (banner) {
+                    banner.style.display = 'none';
+                }
+            })
+            .catch(err => console.error("警报检查失败:", err));
     }
     {% endif %}
 
     function logout() {
-        fetch('/api/logout', {
-            method: 'POST',
-            headers: {'X-CSRFToken': csrfToken}
-        })
-                .then(() => window.location.href = '/login');
+        fetch('/api/logout', {method: 'POST', headers: {'X-CSRFToken': csrfToken}})
+            .then(() => window.location.href = '/login');
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const map = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'};
+        return String(text).replace(/[&<>"']/g, m => map[m]);
     }
 </script>
 </body>
