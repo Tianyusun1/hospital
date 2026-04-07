@@ -147,12 +147,12 @@ def api_class_add():
         try:
             start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
         except ValueError:
-            return jsonify({'code': 400, 'msg': '开始日期格式不正确，请使用 YYYY-MM-DD 格式'})
+            return jsonify({'code': 400, 'msg': '开始日期格式不正确，请使用 YYYY-MM-DD 格式 (例如: 2026-04-07)'})
     if data.get('end_date'):
         try:
             end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
         except ValueError:
-            return jsonify({'code': 400, 'msg': '结束日期格式不正确，请使用 YYYY-MM-DD 格式'})
+            return jsonify({'code': 400, 'msg': '结束日期格式不正确，请使用 YYYY-MM-DD 格式 (例如: 2026-04-07)'})
 
     tc = TrainingClass(
         class_no=class_no,

@@ -84,8 +84,8 @@ def reset_database():
         db.session.commit()
         print("8. 示例缴费记录录入完毕。")
 
-        deadline_soon = datetime.utcnow() + timedelta(hours=12)
-        work1 = Work(student_id=stu1.id, enrollment_id=enroll1.id, title='人像光影练习作品', description='使用自然光拍摄的人像照片', file_url='https://example.com/work1.jpg', deadline=deadline_soon, status='submitted')
+        upcoming_deadline = datetime.utcnow() + timedelta(hours=12)
+        work1 = Work(student_id=stu1.id, enrollment_id=enroll1.id, title='人像光影练习作品', description='使用自然光拍摄的人像照片', file_url='https://example.com/work1.jpg', deadline=upcoming_deadline, status='submitted')
         work2 = Work(student_id=stu2.id, enrollment_id=enroll2.id, title='城市街拍练习', description='街头人文摄影练习', file_url='https://example.com/work2.jpg', deadline=datetime.utcnow() + timedelta(days=3), status='submitted')
         db.session.add_all([work1, work2])
         db.session.commit()

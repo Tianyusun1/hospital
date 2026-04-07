@@ -201,12 +201,12 @@ def api_enrollment_add():
         try:
             service_start = datetime.strptime(data['service_start'], '%Y-%m-%d').date()
         except ValueError:
-            return jsonify({'code': 400, 'msg': '服务开始日期格式不正确，请使用 YYYY-MM-DD 格式'})
+            return jsonify({'code': 400, 'msg': '服务开始日期格式不正确，请使用 YYYY-MM-DD 格式 (例如: 2026-04-07)'})
     if data.get('service_end'):
         try:
             service_end = datetime.strptime(data['service_end'], '%Y-%m-%d').date()
         except ValueError:
-            return jsonify({'code': 400, 'msg': '服务结束日期格式不正确，请使用 YYYY-MM-DD 格式'})
+            return jsonify({'code': 400, 'msg': '服务结束日期格式不正确，请使用 YYYY-MM-DD 格式 (例如: 2026-04-07)'})
 
     enroll = Enrollment(
         student_id=student_id,
