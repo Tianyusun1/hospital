@@ -59,9 +59,11 @@
         .msg-tip { padding: 10px; border-radius: 6px; font-size: 13px; margin-bottom: 10px; display: none; }
         .msg-error { background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; }
         .msg-success { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
-        .review-box { background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-top: 8px; font-size: 13px; }
+        .btn-danger { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+        .btn-danger:hover { background: #fecaca; }
+        .file-info { font-size: 11px; color: #64748b; margin-top: 2px; }
         .review-box .score { font-size: 18px; font-weight: bold; color: var(--primary-color); }
-        .reminder-banner { background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 12px 16px; margin-bottom: 15px; display: none; }
+        .review-box { background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-top: 8px; font-size: 13px; }
         .reminder-banner.active { display: block; }
         .reminder-item { padding: 6px 0; font-size: 13px; border-bottom: 1px dashed #fde68a; }
         .reminder-item:last-child { border-bottom: none; }
@@ -131,7 +133,7 @@
                         <th>截止日期</th>
                         <th>状态</th>
                         <th>点评</th>
-                        {% if role_name in ['admin', 'teacher'] %}<th>操作</th>{% endif %}
+                        <th>操作</th>
                     </tr>
                 </thead>
                 <tbody id="workBody">
@@ -147,14 +149,21 @@
     <div class="modal">
         <h3>📤 提交作品</h3>
         <div id="workFormMsg" class="msg-tip"></div>
-        <div class="form-group"><label>作品标题 *</label><input type="text" id="w_title" placeholder="为你的作品起个名字"></div>
-        <div class="form-group"><label>作品描述</label><textarea id="w_desc" rows="3" placeholder="描述拍摄思路、使用设备等"></textarea></div>
-        <div class="form-group"><label>作品链接 (URL)</label><input type="url" id="w_file_url" placeholder="https://...作品图片或网盘链接"></div>
-        <div class="form-group"><label>截止日期 (选填)</label><input type="datetime-local" id="w_deadline"></div>
-        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:15px">
-            <button class="btn btn-secondary" onclick="closeModal('submitWorkModal')">取消</button>
-            <button class="btn btn-primary" onclick="submitWork()">确认提交</button>
-        </div>
+        <form id="submitWorkForm" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group"><label>作品标题 *</label><input type="text" name="title" id="w_title" placeholder="为你的作品起个名字"></div>
+            <div class="form-group"><label>作品描述</label><textarea name="description" id="w_desc" rows="3" placeholder="描述拍摄思路、使用设备等"></textarea></div>
+            <div class="form-group">
+                <label>上传作品文件（jpg/jpeg/png/webp，最大 5MB）</label>
+                <input type="file" name="file" id="w_file" accept=".jpg,.jpeg,.png,.webp">
+                <div class="file-info" id="w_file_info"></div>
+            </div>
+            <div class="form-group"><label>截止日期 (选填)</label><input type="datetime-local" name="deadline" id="w_deadline"></div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:15px">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('submitWorkModal')">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitWork()">确认提交</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -187,6 +196,21 @@
     document.addEventListener('DOMContentLoaded', () => {
         loadWorks();
         loadReminders();
+
+        // 文件选择提示
+        const fileInput = document.getElementById('w_file');
+        if (fileInput) {
+            fileInput.addEventListener('change', function() {
+                const info = document.getElementById('w_file_info');
+                if (this.files && this.files[0]) {
+                    const f = this.files[0];
+                    const sizeKB = (f.size / 1024).toFixed(1);
+                    info.textContent = `已选择：${f.name}（${sizeKB} KB）`;
+                } else {
+                    info.textContent = '';
+                }
+            });
+        }
     });
 
     function loadWorks() {
@@ -195,7 +219,7 @@
             document.getElementById('work-count').textContent = `(共 ${works.length} 件)`;
             const body = document.getElementById('workBody');
             if (!works.length) {
-                body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#94a3b8">${roleName === 'student' ? '您还没有提交作品' : '暂无作品数据'}</td></tr>`;
+                body.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#94a3b8">${roleName === 'student' ? '您还没有提交作品' : '暂无作品数据'}</td></tr>`;
                 return;
             }
             const statusMap = {submitted: ['已提交', 'status-submitted'], reviewed: ['已点评', 'status-reviewed'], overdue: ['已逾期', 'status-overdue']};
@@ -208,17 +232,32 @@
                 const deadlineHtml = w.deadline
                     ? `<span class="${w.is_overdue ? 'deadline-danger' : ''}">${w.is_overdue ? '🚨' : ''}${escapeHtml(w.deadline)}</span>`
                     : '-';
-                const actionCell = ['admin', 'teacher'].includes(roleName)
-                    ? `<td><button class="btn btn-review btn-sm" onclick="openReview(${w.id}, '${escapeHtml(w.title)}', '${escapeHtml(w.student_name)}')">点评</button></td>` : '';
+
+                // 文件链接
+                let fileLink = '';
+                if (w.file_url) {
+                    const label = w.original_filename ? escapeHtml(w.original_filename) : '查看作品 ↗';
+                    fileLink = `<br><a href="${escapeHtml(w.file_url)}" target="_blank" style="font-size:11px;color:var(--primary-color)">${label}</a>`;
+                }
+
+                // 操作按钮
+                let actionBtns = '';
+                if (['admin', 'teacher'].includes(roleName)) {
+                    actionBtns += `<button class="btn btn-review btn-sm" onclick="openReview(${w.id}, '${escapeHtml(w.title)}', '${escapeHtml(w.student_name)}')">点评</button> `;
+                }
+                if (w.can_delete) {
+                    actionBtns += `<button class="btn btn-danger btn-sm" onclick="deleteWork(${w.id}, '${escapeHtml(w.title)}')">删除</button>`;
+                }
+
                 return `<tr>
                     <td>#${w.id}</td>
                     ${studentCell}
-                    <td><strong>${escapeHtml(w.title)}</strong>${w.file_url ? `<br><a href="${escapeHtml(w.file_url)}" target="_blank" style="font-size:11px;color:var(--primary-color)">查看作品 ↗</a>` : ''}</td>
+                    <td><strong>${escapeHtml(w.title)}</strong>${fileLink}</td>
                     <td>${escapeHtml(w.submitted_at)}</td>
                     <td>${deadlineHtml}</td>
                     <td><span class="status-badge ${statusCls}">${statusLabel}</span></td>
                     <td style="max-width:250px">${reviewsHtml}</td>
-                    ${actionCell}
+                    <td style="white-space:nowrap">${actionBtns || '-'}</td>
                 </tr>`;
             }).join('');
         });
@@ -249,16 +288,40 @@
     }
 
     function submitWork() {
-        const body = {
-            title: document.getElementById('w_title').value,
-            description: document.getElementById('w_desc').value,
-            file_url: document.getElementById('w_file_url').value,
-            deadline: document.getElementById('w_deadline').value || null
-        };
-        postJSON('/work/api/submit', body, res => {
-            if (res.code === 200) { closeModal('submitWorkModal'); loadWorks(); loadReminders(); }
-            else showMsgTip('workFormMsg', res.msg, 'error');
-        });
+        const title = document.getElementById('w_title').value.trim();
+        if (!title) { showMsgTip('workFormMsg', '请填写作品标题', 'error'); return; }
+
+        const formData = new FormData(document.getElementById('submitWorkForm'));
+
+        fetch('/work/api/submit', {
+            method: 'POST',
+            headers: {'X-CSRFToken': csrfToken},
+            body: formData
+        }).then(r => r.json()).then(res => {
+            if (res.code === 200) {
+                closeModal('submitWorkModal');
+                document.getElementById('submitWorkForm').reset();
+                document.getElementById('w_file_info').textContent = '';
+                loadWorks();
+                loadReminders();
+            } else {
+                showMsgTip('workFormMsg', res.msg, 'error');
+            }
+        }).catch(e => alert('提交失败: ' + e));
+    }
+
+    function deleteWork(workId, title) {
+        if (!confirm(`确定要删除作品《${title}》吗？此操作不可恢复！`)) return;
+        fetch(`/work/api/delete/${workId}`, {
+            method: 'POST',
+            headers: {'X-CSRFToken': csrfToken}
+        }).then(r => r.json()).then(res => {
+            if (res.code === 200) {
+                loadWorks();
+            } else {
+                alert('删除失败：' + res.msg);
+            }
+        }).catch(e => alert('请求失败: ' + e));
     }
 
     function submitReview() {
