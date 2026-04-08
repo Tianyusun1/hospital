@@ -113,6 +113,10 @@
             <div class="tab active" onclick="switchTab('myEnroll')">我的报名</div>
         </div>
         <div id="tab-myEnroll" class="tab-content active">
+            <div class="toolbar" style="margin-bottom:12px">
+                <span style="color:#64748b">可直接选择班级提交报名</span>
+                <button class="btn btn-primary" onclick="openAddEnroll()">+ 我要报名</button>
+            </div>
             <table><thead><tr><th>班级</th><th>课程</th><th>状态</th><th>报名时间</th><th>服务期</th></tr></thead>
             <tbody id="myEnrollBody"><tr><td colspan="5" style="text-align:center;color:#94a3b8">加载中...</td></tr></tbody></table>
         </div>
@@ -214,8 +218,12 @@
         <h3>新增报名</h3>
         <div id="enrollFormMsg" class="msg-tip"></div>
         <div class="form-row">
-            <div class="form-group"><label>学员ID *</label><input type="number" id="e_student_id" placeholder="学员ID"></div>
-            <div class="form-group"><label>班级ID *</label><input type="number" id="e_class_id" placeholder="班级ID"></div>
+            <div class="form-group" id="e_student_id_wrap"><label>学员ID *</label><input type="number" id="e_student_id" placeholder="学员ID"></div>
+            <div class="form-group"><label>班级 *</label>
+                <select id="e_class_id">
+                    <option value="">请选择班级</option>
+                </select>
+            </div>
         </div>
         <div class="form-row">
             <div class="form-group"><label>服务开始日期</label><input type="date" id="e_service_start"></div>
@@ -280,11 +288,16 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        loadClassOptions();
         if (roleName === 'student') {
             loadMyInfo();
             loadMyEnrollments();
+            const studentWrap = document.getElementById('e_student_id_wrap');
+            if (studentWrap) studentWrap.style.display = 'none';
         } else {
             loadStudents();
+            const studentWrap = document.getElementById('e_student_id_wrap');
+            if (studentWrap) studentWrap.style.display = 'block';
         }
     });
 
@@ -387,6 +400,20 @@
         });
     }
 
+    function loadClassOptions() {
+        fetch('/class/api/list').then(r => r.json()).then(res => {
+            const select = document.getElementById('e_class_id');
+            if (!select) return;
+            if (!res.data || !res.data.length) {
+                select.innerHTML = '<option value="">暂无可选班级</option>';
+                return;
+            }
+            select.innerHTML = '<option value="">请选择班级</option>' + res.data.map(c =>
+                `<option value="${c.id}">#${c.id} ${escapeHtml(c.class_no)} - ${escapeHtml(c.course_name)}</option>`
+            ).join('');
+        });
+    }
+
     // ---- 模态框 ----
     function openAddStudent() { document.getElementById('addStudentModal').classList.add('active'); }
     function openAddEnroll() { document.getElementById('addEnrollModal').classList.add('active'); }
@@ -430,11 +457,18 @@
     }
 
     function submitAddEnroll() {
-        const body = {student_id: document.getElementById('e_student_id').value, class_id: document.getElementById('e_class_id').value,
+        const body = {class_id: document.getElementById('e_class_id').value,
             status: document.getElementById('e_status').value, service_start: document.getElementById('e_service_start').value,
             service_end: document.getElementById('e_service_end').value, notes: document.getElementById('e_notes').value};
+        if (roleName !== 'student') {
+            body.student_id = document.getElementById('e_student_id').value;
+        }
         postJSON('/enrollment/api/add', body, res => {
-            if (res.code === 200) { closeModal('addEnrollModal'); loadEnrollments(); }
+            if (res.code === 200) {
+                closeModal('addEnrollModal');
+                if (roleName === 'student') loadMyEnrollments();
+                else loadEnrollments();
+            }
             else showMsgTip('enrollFormMsg', res.msg, 'error');
         });
     }

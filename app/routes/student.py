@@ -27,6 +27,34 @@ def _write_log(action, target):
     ))
 
 
+def _ensure_student_profile_for_user(user_id, creator_id=None):
+    stu = Student.query.filter_by(user_id=user_id).first()
+    if stu:
+        return stu
+
+    user = User.query.get(user_id)
+    if not user:
+        return None
+
+    candidate_phone = (user.phone or f'auto-{user.id}')[:20]
+    existing_phone = Student.query.filter(
+        Student.phone == candidate_phone,
+        Student.user_id != user.id
+    ).first()
+    if existing_phone:
+        candidate_phone = f'auto-{user.id}'
+
+    stu = Student(
+        name=(user.real_name or user.username or '学员').strip(),
+        phone=candidate_phone,
+        user_id=user.id,
+        created_by=creator_id if creator_id is not None else user.id
+    )
+    db.session.add(stu)
+    db.session.flush()
+    return stu
+
+
 # ================= 页面路由 =================
 
 @student_bp.route('/student/')
@@ -74,9 +102,10 @@ def api_student_list():
 @roles_required('student')
 def api_my_info():
     uid = session.get('user_id')
-    stu = Student.query.filter_by(user_id=uid).first()
+    stu = _ensure_student_profile_for_user(uid, uid)
     if not stu:
         return jsonify({'code': 404, 'msg': '未找到您的学员档案，请联系教务'})
+    db.session.commit()
     return jsonify({'code': 200, 'data': {
         'id': stu.id,
         'name': stu.name,
@@ -183,17 +212,30 @@ def api_enrollment_list():
 
 
 @student_bp.route('/enrollment/api/add', methods=['POST'])
-@roles_required('admin', 'staff')
+@roles_required('admin', 'staff', 'student')
 def api_enrollment_add():
-    data = request.get_json()
+    data = request.get_json() or {}
+    role = session.get('role_name')
+    uid = session.get('user_id')
     student_id = data.get('student_id')
     class_id = data.get('class_id')
-    if not student_id or not class_id:
+
+    if role == 'student':
+        stu = _ensure_student_profile_for_user(uid, uid)
+        if not stu:
+            return jsonify({'code': 404, 'msg': '未找到您的学员档案，请联系教务'})
+        student_id = stu.id
+
+    if role in ['admin', 'staff'] and not student_id:
         return jsonify({'code': 400, 'msg': '学员和班级为必填项'})
+    if not class_id:
+        return jsonify({'code': 400, 'msg': '班级为必填项'})
     if not Student.query.get(student_id):
         return jsonify({'code': 404, 'msg': '学员不存在'})
     if not TrainingClass.query.get(class_id):
         return jsonify({'code': 404, 'msg': '班级不存在'})
+    if Enrollment.query.filter_by(student_id=student_id, class_id=class_id).first():
+        return jsonify({'code': 400, 'msg': '该学员已报名该班级，请勿重复提交'})
 
     service_start = None
     service_end = None
@@ -211,7 +253,7 @@ def api_enrollment_add():
     enroll = Enrollment(
         student_id=student_id,
         class_id=class_id,
-        status=data.get('status', 'active'),
+        status='pending' if role == 'student' else data.get('status', 'active'),
         service_start=service_start,
         service_end=service_end,
         notes=data.get('notes', '').strip() or None,

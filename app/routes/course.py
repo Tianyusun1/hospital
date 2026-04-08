@@ -107,7 +107,7 @@ def api_course_update():
 # ================= 班级 API =================
 
 @course_bp.route('/class/api/list', methods=['GET'])
-@roles_required('admin', 'staff', 'teacher')
+@roles_required('admin', 'staff', 'teacher', 'student')
 def api_class_list():
     classes = TrainingClass.query.options(
         joinedload(TrainingClass.course),

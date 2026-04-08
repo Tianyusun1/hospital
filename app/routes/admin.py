@@ -17,6 +17,34 @@ def get_real_ip():
     return request.headers.get('X-Forwarded-For', request.remote_addr)
 
 
+def _ensure_student_profile_for_user(user_id, creator_id=None):
+    stu = Student.query.filter_by(user_id=user_id).first()
+    if stu:
+        return stu
+
+    user = User.query.get(user_id)
+    if not user:
+        return None
+
+    candidate_phone = (user.phone or f'auto-{user.id}')[:20]
+    existing_phone = Student.query.filter(
+        Student.phone == candidate_phone,
+        Student.user_id != user.id
+    ).first()
+    if existing_phone:
+        candidate_phone = f'auto-{user.id}'
+
+    stu = Student(
+        name=(user.real_name or user.username or '学员').strip(),
+        phone=candidate_phone,
+        user_id=user.id,
+        created_by=creator_id if creator_id is not None else user.id
+    )
+    db.session.add(stu)
+    db.session.flush()
+    return stu
+
+
 # ================= 用户审核与管理 =================
 
 @admin_bp.route('/users/review', methods=['GET'])
@@ -60,6 +88,9 @@ def do_review():
 
     if action == 'approve':
         user.status = 'approved'
+        role = Role.query.get(user.role_id)
+        if role and role.role_name == 'student':
+            _ensure_student_profile_for_user(user.id, session.get('user_id'))
         msg = f'已通过 {user.real_name} 的注册申请'
     else:
         user.status = 'rejected'
@@ -110,6 +141,9 @@ def update_user_info():
         user.password_hash = generate_password_hash(data['new_password'])
     if 'status' in data:
         user.status = data['status']
+        role = Role.query.get(user.role_id)
+        if data['status'] == 'approved' and role and role.role_name == 'student':
+            _ensure_student_profile_for_user(user.id, session.get('user_id'))
     if 'unlock' in data and data['unlock'] is True:
         user.is_locked = False
         user.failed_login_attempts = 0
