@@ -1,3 +1,4 @@
+import os
 from flask import Flask
 from config import Config
 from app.extensions import db
@@ -11,6 +12,9 @@ def create_app():
     app.config.from_object(Config)
     db.init_app(app)
     csrf.init_app(app)
+
+    # 确保上传目录存在
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
     from app.routes.auth import auth_bp
     app.register_blueprint(auth_bp)

@@ -86,6 +86,11 @@ class Work(db.Model):
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
     file_url = db.Column(db.String(500), nullable=True)
+    # 本地上传文件信息
+    file_path = db.Column(db.String(500), nullable=True)        # 相对路径，如 uploads/xxxx.jpg
+    original_filename = db.Column(db.String(255), nullable=True)  # 原始文件名
+    file_size = db.Column(db.Integer, nullable=True)             # 字节数
+    file_mime = db.Column(db.String(100), nullable=True)         # MIME 类型
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
     deadline = db.Column(db.DateTime, nullable=True)
     status = db.Column(db.String(20), default='submitted', nullable=False)
