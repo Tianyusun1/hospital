@@ -46,6 +46,11 @@
         .status-overdue { background: #fee2e2; color: #991b1b; }
         .deadline-danger { color: #dc2626; font-weight: bold; }
         .deadline-warning { color: #d97706; font-weight: bold; }
+        .file-upload-area { border: 2px dashed var(--border-color); border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s; background: #f8fafc; }
+        .file-upload-area:hover, .file-upload-area.dragover { border-color: var(--primary-color); background: #f0fdf4; }
+        .file-upload-area input[type="file"] { display: none; }
+        .file-hint { font-size: 12px; color: #94a3b8; margin-top: 6px; }
+        .file-selected { font-size: 13px; color: var(--primary-color); margin-top: 6px; font-weight: 500; }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; justify-content: center; align-items: center; }
         .modal-overlay.active { display: flex; }
         .modal { background: white; border-radius: 12px; padding: 30px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
@@ -149,11 +154,19 @@
         <div id="workFormMsg" class="msg-tip"></div>
         <div class="form-group"><label>作品标题 *</label><input type="text" id="w_title" placeholder="为你的作品起个名字"></div>
         <div class="form-group"><label>作品描述</label><textarea id="w_desc" rows="3" placeholder="描述拍摄思路、使用设备等"></textarea></div>
-        <div class="form-group"><label>作品链接 (URL)</label><input type="url" id="w_file_url" placeholder="https://...作品图片或网盘链接"></div>
+        <div class="form-group">
+            <label>上传作品图片</label>
+            <div class="file-upload-area" id="uploadArea" onclick="document.getElementById('w_file').click()">
+                <input type="file" id="w_file" accept=".jpg,.jpeg,.png,.webp" onchange="onFileSelected(this)">
+                <div>📁 点击选择图片文件</div>
+                <div class="file-hint">支持 JPG / JPEG / PNG / WEBP，最大 5 MB</div>
+                <div class="file-selected" id="fileSelectedName"></div>
+            </div>
+        </div>
         <div class="form-group"><label>截止日期 (选填)</label><input type="datetime-local" id="w_deadline"></div>
         <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:15px">
             <button class="btn btn-secondary" onclick="closeModal('submitWorkModal')">取消</button>
-            <button class="btn btn-primary" onclick="submitWork()">确认提交</button>
+            <button class="btn btn-primary" id="submitWorkBtn" onclick="submitWork()">确认提交</button>
         </div>
     </div>
 </div>
@@ -189,6 +202,33 @@
         loadReminders();
     });
 
+    // 拖拽上传支持
+    const uploadArea = document.getElementById('uploadArea');
+    if (uploadArea) {
+        uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', e => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                document.getElementById('w_file').files = e.dataTransfer.files;
+                onFileSelected(document.getElementById('w_file'));
+            }
+        });
+    }
+
+    function onFileSelected(input) {
+        const nameEl = document.getElementById('fileSelectedName');
+        if (input.files && input.files[0]) {
+            const f = input.files[0];
+            const sizeMB = (f.size / 1024 / 1024).toFixed(2);
+            nameEl.textContent = `已选择：${f.name}（${sizeMB} MB）`;
+        } else {
+            nameEl.textContent = '';
+        }
+    }
+
     function loadWorks() {
         fetch('/work/api/list').then(r => r.json()).then(res => {
             const works = res.data || [];
@@ -208,12 +248,22 @@
                 const deadlineHtml = w.deadline
                     ? `<span class="${w.is_overdue ? 'deadline-danger' : ''}">${w.is_overdue ? '🚨' : ''}${escapeHtml(w.deadline)}</span>`
                     : '-';
+
+                // 文件链接：本地上传文件（无协议前缀）or 外部链接
+                let fileLinkHtml = '';
+                if (w.file_url) {
+                    const isExternal = /^https?:\/\//i.test(w.file_url);
+                    fileLinkHtml = isExternal
+                        ? `<br><a href="${escapeHtml(w.file_url)}" target="_blank" style="font-size:11px;color:var(--primary-color)">查看作品 ↗</a>`
+                        : `<br><a href="${escapeHtml(w.file_url)}" target="_blank" style="font-size:11px;color:var(--primary-color)">🖼️ 预览 / 下载 ↗</a>`;
+                }
+
                 const actionCell = ['admin', 'teacher'].includes(roleName)
                     ? `<td><button class="btn btn-review btn-sm" onclick="openReview(${w.id}, '${escapeHtml(w.title)}', '${escapeHtml(w.student_name)}')">点评</button></td>` : '';
                 return `<tr>
                     <td>#${w.id}</td>
                     ${studentCell}
-                    <td><strong>${escapeHtml(w.title)}</strong>${w.file_url ? `<br><a href="${escapeHtml(w.file_url)}" target="_blank" style="font-size:11px;color:var(--primary-color)">查看作品 ↗</a>` : ''}</td>
+                    <td><strong>${escapeHtml(w.title)}</strong>${fileLinkHtml}</td>
                     <td>${escapeHtml(w.submitted_at)}</td>
                     <td>${deadlineHtml}</td>
                     <td><span class="status-badge ${statusCls}">${statusLabel}</span></td>
@@ -249,15 +299,48 @@
     }
 
     function submitWork() {
-        const body = {
-            title: document.getElementById('w_title').value,
-            description: document.getElementById('w_desc').value,
-            file_url: document.getElementById('w_file_url').value,
-            deadline: document.getElementById('w_deadline').value || null
-        };
-        postJSON('/work/api/submit', body, res => {
-            if (res.code === 200) { closeModal('submitWorkModal'); loadWorks(); loadReminders(); }
-            else showMsgTip('workFormMsg', res.msg, 'error');
+        const title = document.getElementById('w_title').value.trim();
+        if (!title) { showMsgTip('workFormMsg', '请填写作品标题', 'error'); return; }
+
+        const fileInput = document.getElementById('w_file');
+        const formData = new FormData();
+        formData.append('title', title);
+        formData.append('description', document.getElementById('w_desc').value);
+        formData.append('deadline', document.getElementById('w_deadline').value || '');
+        if (fileInput.files && fileInput.files[0]) {
+            formData.append('work_file', fileInput.files[0]);
+        }
+
+        const btn = document.getElementById('submitWorkBtn');
+        btn.disabled = true;
+        btn.textContent = '提交中...';
+
+        fetch('/work/api/submit', {
+            method: 'POST',
+            headers: {'X-CSRFToken': csrfToken},
+            body: formData
+        })
+        .then(r => r.json())
+        .then(res => {
+            btn.disabled = false;
+            btn.textContent = '确认提交';
+            if (res.code === 200) {
+                closeModal('submitWorkModal');
+                document.getElementById('w_title').value = '';
+                document.getElementById('w_desc').value = '';
+                document.getElementById('w_deadline').value = '';
+                fileInput.value = '';
+                document.getElementById('fileSelectedName').textContent = '';
+                loadWorks();
+                loadReminders();
+            } else {
+                showMsgTip('workFormMsg', res.msg, 'error');
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.textContent = '确认提交';
+            showMsgTip('workFormMsg', '网络错误，请稍后重试', 'error');
         });
     }
 

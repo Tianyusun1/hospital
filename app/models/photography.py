@@ -85,7 +85,8 @@ class Work(db.Model):
     enrollment_id = db.Column(db.Integer, db.ForeignKey('enrollments.id'), nullable=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    file_url = db.Column(db.String(500), nullable=True)
+    file_url = db.Column(db.String(500), nullable=True)   # 外部链接（兼容旧数据）
+    file_path = db.Column(db.String(500), nullable=True)  # 本地上传文件相对 static 目录的路径
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
     deadline = db.Column(db.DateTime, nullable=True)
     status = db.Column(db.String(20), default='submitted', nullable=False)

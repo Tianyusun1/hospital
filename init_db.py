@@ -46,9 +46,11 @@ def reset_database():
         staff_user = User(username='staff', password_hash=pw, real_name='教务张老师', department='教务处', phone='13800000001', status='approved', role_id=staff_role.id)
         teacher_user = User(username='teacher', password_hash=pw, real_name='摄影王老师', department='摄影教研组', phone='13800000002', status='approved', role_id=teacher_role.id)
         student_user = User(username='student', password_hash=pw, real_name='李同学', department='学员', phone='13800000003', status='approved', role_id=student_role.id)
-        db.session.add_all([admin_user, staff_user, teacher_user, student_user])
+        # 第二个示例学员账号（approved），用于演示自主注册后审核通过的全流程
+        student_user2 = User(username='student2', password_hash=pw, real_name='陈小华', department='学员', phone='13800000004', status='approved', role_id=student_role.id)
+        db.session.add_all([admin_user, staff_user, teacher_user, student_user, student_user2])
         db.session.commit()
-        print("3. 示例账号初始化完毕！(账号: admin/staff/teacher/student, 密码均为: 123456)")
+        print("3. 示例账号初始化完毕！(账号: admin/staff/teacher/student/student2, 密码均为: 123456)")
 
         course1 = Course(name='人像摄影基础班', description='学习人像摄影构图、光线运用与后期处理', price=2980, duration_weeks=8, status='active')
         course2 = Course(name='风光摄影进阶班', description='掌握风光摄影的拍摄技法与后期调色', price=3580, duration_weeks=10, status='active')
@@ -66,7 +68,8 @@ def reset_database():
         stu1 = Student(name='李同学', phone='13900000001', id_card='340000200001010001', address='安徽省芜湖市', user_id=student_user.id, created_by=staff_user.id)
         stu2 = Student(name='王小明', phone='13900000002', id_card='340000200002020002', address='安徽省合肥市', created_by=staff_user.id)
         stu3 = Student(name='赵丽华', phone='13900000003', id_card='340000200003030003', address='安徽省马鞍山市', created_by=staff_user.id)
-        db.session.add_all([stu1, stu2, stu3])
+        stu4 = Student(name='陈小华', phone='13900000004', id_card='340000200004040004', address='安徽省宣城市', user_id=student_user2.id, created_by=staff_user.id)
+        db.session.add_all([stu1, stu2, stu3, stu4])
         db.session.commit()
         print("6. 示例学员档案录入完毕。")
 
@@ -85,8 +88,8 @@ def reset_database():
         print("8. 示例缴费记录录入完毕。")
 
         upcoming_deadline = datetime.utcnow() + timedelta(hours=12)
-        work1 = Work(student_id=stu1.id, enrollment_id=enroll1.id, title='人像光影练习作品', description='使用自然光拍摄的人像照片', file_url='https://example.com/work1.jpg', deadline=upcoming_deadline, status='submitted')
-        work2 = Work(student_id=stu2.id, enrollment_id=enroll2.id, title='城市街拍练习', description='街头人文摄影练习', file_url='https://example.com/work2.jpg', deadline=datetime.utcnow() + timedelta(days=3), status='submitted')
+        work1 = Work(student_id=stu1.id, enrollment_id=enroll1.id, title='人像光影练习作品', description='使用自然光拍摄的人像照片', deadline=upcoming_deadline, status='submitted')
+        work2 = Work(student_id=stu2.id, enrollment_id=enroll2.id, title='城市街拍练习', description='街头人文摄影练习', deadline=datetime.utcnow() + timedelta(days=3), status='submitted')
         db.session.add_all([work1, work2])
         db.session.commit()
         print("9. 示例作品录入完毕。")
@@ -107,7 +110,8 @@ def reset_database():
     print("   admin    - 超级管理员")
     print("   staff    - 教务/前台")
     print("   teacher  - 教师")
-    print("   student  - 学员（李同学）")
+    print("   student  - 学员（李同学，已审核通过）")
+    print("   student2 - 学员（陈小华，已审核通过，可演示注册审核流程）")
     print("\n运行 `python run.py` 启动系统")
 
 if __name__ == '__main__':
