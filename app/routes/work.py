@@ -85,6 +85,15 @@ def api_work_list():
         if stu:
             current_student_id = stu.id
 
+    # 教师班级内的 enrollment_id 集合（仅 teacher 角色时使用）
+    teacher_enrollment_ids = set()
+    if role == 'teacher':
+        t_class_ids = [tc.id for tc in TrainingClass.query.filter_by(teacher_id=uid).all()]
+        if t_class_ids:
+            teacher_enrollment_ids = {
+                e.id for e in Enrollment.query.filter(Enrollment.class_id.in_(t_class_ids)).all()
+            }
+
     data = []
     for w in works:
         reviews = [{
@@ -114,7 +123,8 @@ def api_work_list():
         if role in ('admin', 'staff'):
             can_delete = True
         elif role == 'teacher':
-            can_delete = True
+            # 教师只能删除自己班级内学员的作品
+            can_delete = (w.enrollment_id in teacher_enrollment_ids)
         elif role == 'student' and current_student_id and w.student_id == current_student_id:
             # 学员只能删除尚未点评的自己的作品
             can_delete = (w.status != 'reviewed')
@@ -259,7 +269,9 @@ def api_work_delete(work_id):
 
     _write_log(
         '删除作品',
-        f'操作者: {session.get("real_name")}({role}), 作品ID: {work_id}, 标题: {work_title}, 学员: {student_name}'
+        f'操作者: {session.get("real_name")}({role}), 作品ID: {work_id}, 标题: {work_title}, 学员: {student_name}',
+        risk_level='medium',
+        risk_msg='作品删除操作（数据库记录及磁盘文件均已移除）'
     )
     db.session.commit()
     return jsonify({'code': 200, 'msg': '作品已删除'})
