@@ -1,120 +1,223 @@
-{% extends "base.html" %} 
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>数据统计 - 摄影机构管理系统</title>
+    <style>
+        :root { --primary-color: #059669; --primary-light: #d1fae5; --sidebar-bg: #1e293b; --sidebar-hover: #334155; --bg-color: #f1f5f9; --text-main: #334155; --border-color: #e2e8f0; }
+        body { font-family: 'PingFang SC', sans-serif; margin: 0; display: flex; height: 100vh; background-color: var(--bg-color); color: var(--text-main); }
+        .sidebar { width: 220px; background-color: var(--sidebar-bg); color: white; display: flex; flex-direction: column; box-shadow: 2px 0 5px rgba(0,0,0,0.1); flex-shrink: 0; }
+        .logo { padding: 18px; text-align: center; font-size: 16px; font-weight: bold; background-color: #0f172a; letter-spacing: 1px; border-bottom: 1px solid #334155; }
+        .logo span { color: var(--primary-color); }
+        .menu { flex: 1; padding: 15px 0; overflow-y: auto; }
+        .menu a { display: block; padding: 13px 20px; color: #cbd5e1; text-decoration: none; font-size: 14px; transition: all 0.3s; border-left: 4px solid transparent; }
+        .menu a:hover, .menu a.active { background-color: var(--sidebar-hover); color: white; border-left-color: var(--primary-color); }
+        .menu-title { padding: 8px 20px; font-size: 11px; color: #64748b; text-transform: uppercase; margin-top: 10px; }
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .topbar { height: 55px; background-color: white; display: flex; justify-content: space-between; align-items: center; padding: 0 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .user-info { display: flex; align-items: center; gap: 12px; }
+        .logout-btn { background: transparent; border: 1px solid #e2e8f0; padding: 5px 12px; border-radius: 6px; cursor: pointer; color: #64748b; transition: all 0.2s; }
+        .logout-btn:hover { color: #ef4444; border-color: #ef4444; }
+        .workspace { padding: 25px; flex: 1; overflow-y: auto; }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 25px; }
+        .stat-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid var(--primary-color); }
+        .stat-card.blue { border-top-color: #3b82f6; }
+        .stat-card.orange { border-top-color: #f59e0b; }
+        .stat-card.red { border-top-color: #ef4444; }
+        .stat-card h3 { margin: 0 0 8px 0; font-size: 13px; color: #64748b; }
+        .stat-card .value { font-size: 36px; font-weight: bold; color: var(--text-main); }
+        .stat-card .sub { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+        .section-title { font-size: 16px; font-weight: bold; color: var(--text-main); margin: 0 0 15px 0; }
+        .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px; }
+        .chart-box { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+        .table-box { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 13px; }
+        th { background-color: #f8fafc; color: #64748b; font-weight: 600; }
+        .bar-outer { background: #f1f5f9; border-radius: 4px; height: 14px; overflow: hidden; }
+        .bar-inner { height: 100%; background: var(--primary-color); border-radius: 4px; transition: width 0.5s; }
+        .loading { text-align: center; color: #94a3b8; padding: 40px; }
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="logo">📷 <span>摄影机构</span>管理</div>
+    <div class="menu">
+        <a href="/dashboard">🏠 工作台首页</a>
+        <div class="menu-title">学员业务</div>
+        <a href="/student/">📋 学员管理</a>
+        <a href="/course/">📚 课程与班级</a>
+        <a href="/work/">🖼️ 作品管理</a>
+        <div class="menu-title">系统管理</div>
+        <a href="/admin/users/review">👥 用户管理</a>
+        <a href="/admin/audit">📝 审计日志</a>
+        <a href="/admin/statistics" class="active">📊 数据统计</a>
+    </div>
+</div>
 
-{% block title %}管理员数据面板{% endblock %}
-
-{% block content %}
-<div class="container mt-4">
-    <h2 class="mb-4">📊 系统数据大屏</h2>
-
-    <div class="row mb-4 text-center">
-        <div class="col-md-3">
-            <div class="card text-white bg-primary mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">总设备数</h5>
-                    <h2 id="card-total-equip">0</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-success mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">系统总用户</h5>
-                    <h2 id="card-total-users">0</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-warning mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">待审核用户</h5>
-                    <h2 id="card-pending-users">0</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-danger mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">风险操作拦截</h5>
-                    <h2 id="card-high-risk">0</h2>
-                </div>
-            </div>
+<div class="main-content">
+    <div class="topbar">
+        <div><strong>当前位置：</strong>数据统计</div>
+        <div class="user-info">
+            <span>你好，<strong>{{ real_name }}</strong></span>
+            <button class="logout-btn" onclick="logout()">安全退出</button>
         </div>
     </div>
 
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">设备状态分布</div>
-                <div class="card-body">
-                    <div id="statusPieChart" style="width: 100%; height: 400px;"></div>
+    <div class="workspace">
+        <div id="loading" class="loading">⏳ 正在加载统计数据...</div>
+        <div id="stats-content" style="display:none">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>学员总数</h3>
+                    <div class="value" id="val-students">0</div>
+                    <div class="sub">已录入学员档案</div>
+                </div>
+                <div class="stat-card blue">
+                    <h3>在读报名</h3>
+                    <div class="value" id="val-enrollments">0</div>
+                    <div class="sub">状态为"在读"的报名</div>
+                </div>
+                <div class="stat-card orange">
+                    <h3>待点评作品</h3>
+                    <div class="value" id="val-pending-works">0</div>
+                    <div class="sub">已提交未点评</div>
+                </div>
+                <div class="stat-card red">
+                    <h3>24h 风险操作</h3>
+                    <div class="value" id="val-risk">0</div>
+                    <div class="sub">过去24小时异常操作</div>
                 </div>
             </div>
-        </div>
-        
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">近7天系统活跃度预留</div>
-                <div class="card-body">
-                    <div id="trendBarChart" style="width: 100%; height: 400px;">
-                        <p class="text-muted text-center mt-5">暂无数据/功能开发中...</p>
-                    </div>
+
+            <div class="charts-row">
+                <div class="chart-box">
+                    <div class="section-title">📚 各课程在读报名人数</div>
+                    <div id="course-enrollments-chart"></div>
                 </div>
+                <div class="chart-box">
+                    <div class="section-title">💰 缴费类型分布</div>
+                    <div id="payment-type-chart"></div>
+                </div>
+            </div>
+
+            <div class="table-box">
+                <div class="section-title">📋 近期报名统计（最新10条）</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>学员</th>
+                            <th>课程</th>
+                            <th>班级</th>
+                            <th>状态</th>
+                            <th>报名时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-enrollments-tbody">
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // 初始化 ECharts 实例
-    var pieChart = echarts.init(document.getElementById('statusPieChart'));
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
-    // 请求后端 API 获取数据
-    axios.get("{{ url_for('admin.get_statistics_data') }}")
-        .then(function (response) {
-            if (response.data.code === 200) {
-                const data = response.data.data;
-                
-                // 1. 填充顶部卡片数据
-                document.getElementById('card-total-equip').innerText = data.cards.total_equip;
-                document.getElementById('card-total-users').innerText = data.cards.total_users;
-                document.getElementById('card-pending-users').innerText = data.cards.pending_users;
-                document.getElementById('card-high-risk').innerText = data.cards.high_risk_logs;
+    document.addEventListener('DOMContentLoaded', loadStats);
 
-                // 2. 渲染饼图
-                var pieOption = {
-                    tooltip: { trigger: 'item' },
-                    legend: { top: '5%', left: 'center' },
-                    color: ['#28a745', '#007bff', '#ffc107', '#dc3545'], // 对应：在库绿、借出蓝、维修黄、报废红
-                    series: [
-                        {
-                            name: '设备状态',
-                            type: 'pie',
-                            radius: ['40%', '70%'],
-                            avoidLabelOverlap: false,
-                            itemStyle: {
-                                borderRadius: 10,
-                                borderColor: '#fff',
-                                borderWidth: 2
-                            },
-                            label: { show: false, position: 'center' },
-                            emphasis: {
-                                label: { show: true, fontSize: 20, fontWeight: 'bold' }
-                            },
-                            labelLine: { show: false },
-                            data: data.equipment_status
-                        }
-                    ]
-                };
-                pieChart.setOption(pieOption);
-            }
-        })
-        .catch(function (error) {
-            console.error("获取统计数据失败:", error);
-        });
-});
+    function loadStats() {
+        fetch('/admin/api/statistics')
+            .then(r => r.json())
+            .then(res => {
+                if (res.code !== 200) return;
+                const d = res.data;
+                document.getElementById('val-students').innerText = d.total_students;
+                document.getElementById('val-enrollments').innerText = d.active_enrollments;
+                document.getElementById('val-pending-works').innerText = d.pending_works;
+                document.getElementById('val-risk').innerText = d.risk_24h;
+
+                renderCourseChart(d.course_stats);
+                renderPaymentChart(d.payment_stats);
+                renderRecentTable(d.recent_enrollments);
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('stats-content').style.display = 'block';
+            })
+            .catch(e => {
+                document.getElementById('loading').innerText = '加载失败，请刷新重试';
+            });
+    }
+
+    function renderCourseChart(stats) {
+        const container = document.getElementById('course-enrollments-chart');
+        if (!stats || stats.length === 0) { container.innerHTML = '<p style="color:#94a3b8;text-align:center;padding:20px">暂无数据</p>'; return; }
+        const max = Math.max(...stats.map(s => s.count), 1);
+        container.innerHTML = stats.map(s => `
+            <div style="margin-bottom:12px">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px">
+                    <span>${escapeHtml(s.name)}</span>
+                    <span style="color:#059669;font-weight:bold">${s.count} 人</span>
+                </div>
+                <div class="bar-outer">
+                    <div class="bar-inner" style="width:${Math.round(s.count/max*100)}%"></div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function renderPaymentChart(stats) {
+        const container = document.getElementById('payment-type-chart');
+        if (!stats || stats.length === 0) { container.innerHTML = '<p style="color:#94a3b8;text-align:center;padding:20px">暂无数据</p>'; return; }
+        const colors = {'deposit':'#f59e0b','final':'#059669','refund':'#ef4444'};
+        const labels = {'deposit':'定金','final':'尾款','refund':'退款'};
+        const total = stats.reduce((sum, s) => sum + s.total, 0);
+        container.innerHTML = stats.map(s => `
+            <div style="margin-bottom:14px">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px">
+                    <span style="color:${colors[s.pay_type]||'#64748b'};font-weight:bold">${labels[s.pay_type]||s.pay_type}</span>
+                    <span>¥${parseFloat(s.total).toFixed(2)}</span>
+                </div>
+                <div class="bar-outer">
+                    <div class="bar-inner" style="width:${total>0?Math.round(s.total/total*100):0}%;background:${colors[s.pay_type]||'#64748b'}"></div>
+                </div>
+                <div style="font-size:11px;color:#94a3b8;margin-top:2px">${s.count} 笔</div>
+            </div>
+        `).join('');
+    }
+
+    function renderRecentTable(enrollments) {
+        const tbody = document.getElementById('recent-enrollments-tbody');
+        if (!enrollments || enrollments.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#94a3b8">暂无数据</td></tr>';
+            return;
+        }
+        const statusLabel = {active:'在读',pending:'待付款',withdrawn:'退班',completed:'已完成'};
+        const statusColor = {active:'#166534',pending:'#92400e',withdrawn:'#991b1b',completed:'#0c4a6e'};
+        const statusBg = {active:'#dcfce7',pending:'#fef3c7',withdrawn:'#fee2e2',completed:'#e0f2fe'};
+        tbody.innerHTML = enrollments.map(e => `
+            <tr>
+                <td>${escapeHtml(e.student_name)}</td>
+                <td>${escapeHtml(e.course_name)}</td>
+                <td>${escapeHtml(e.class_no)}</td>
+                <td><span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold;background:${statusBg[e.status]||'#f1f5f9'};color:${statusColor[e.status]||'#64748b'}">${statusLabel[e.status]||e.status}</span></td>
+                <td>${escapeHtml(e.enrolled_at)}</td>
+            </tr>
+        `).join('');
+    }
+
+    function logout() {
+        fetch('/api/logout', {method:'POST', headers:{'X-CSRFToken': csrfToken}})
+            .then(() => window.location.href = '/login');
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const map = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'};
+        return String(text).replace(/[&<>"']/g, m => map[m]);
+    }
 </script>
-{% endblock %}
+</body>
+</html>

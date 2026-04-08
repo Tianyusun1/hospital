@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pycache
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# Flask instance
+instance/
+
+# Upload files (user content, not tracked in git)
+app/static/uploads/*
+!app/static/uploads/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
