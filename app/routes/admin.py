@@ -3,7 +3,7 @@ from app.extensions import db
 from app.models.user import User, Role
 from app.models.log import SysLog
 from app.models.photography import Enrollment, Payment, WorkReview
-from app.utils.decorators import admin_required
+from app.utils.decorators import admin_required, roles_required
 from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta
 from app.utils.security import check_operation_risk
@@ -16,16 +16,37 @@ def get_real_ip():
     return request.headers.get('X-Forwarded-For', request.remote_addr)
 
 
+def ensure_core_roles():
+    role_defs = [
+        ('admin', '超级管理员'),
+        ('staff', '教务/前台'),
+        ('teacher', '教师'),
+        ('student', '学员')
+    ]
+    role_map = {}
+    changed = False
+    for role_name, desc in role_defs:
+        role = Role.query.filter_by(role_name=role_name).first()
+        if not role:
+            role = Role(role_name=role_name, description=desc)
+            db.session.add(role)
+            changed = True
+        role_map[role_name] = role
+    if changed:
+        db.session.commit()
+    return role_map
+
+
 # ================= 用户审核与管理 =================
 
 @admin_bp.route('/users/review', methods=['GET'])
-@admin_required
+@roles_required('admin', 'staff')
 def review_page():
-    return render_template('admin/review_users.html')
+    return render_template('admin/review_users.html', role_name=session.get('role_name'))
 
 
 @admin_bp.route('/api/users/pending', methods=['GET'])
-@admin_required
+@roles_required('admin', 'staff')
 def get_pending_users():
     users = User.query.options(joinedload(User.role)).filter_by(status='pending').order_by(User.created_at.desc()).all()
     user_list = [{
@@ -41,7 +62,7 @@ def get_pending_users():
 
 
 @admin_bp.route('/api/users/do_review', methods=['POST'])
-@admin_required
+@roles_required('admin', 'staff')
 def do_review():
     data = request.get_json()
     user_id = data.get('user_id')
@@ -79,7 +100,7 @@ def do_review():
 
 
 @admin_bp.route('/api/users/all', methods=['GET'])
-@admin_required
+@roles_required('admin', 'staff')
 def get_all_users():
     users = User.query.options(joinedload(User.role)).filter(User.status != 'pending').all()
     data = [{
@@ -96,7 +117,7 @@ def get_all_users():
 
 
 @admin_bp.route('/api/users/update', methods=['POST'])
-@admin_required
+@roles_required('admin', 'staff')
 def update_user_info():
     data = request.get_json()
     user = User.query.get(data.get('user_id'))
@@ -157,10 +178,59 @@ def delete_user():
 
 
 @admin_bp.route('/api/users/roles', methods=['GET'])
-@admin_required
+@roles_required('admin', 'staff')
 def get_roles():
-    roles = Role.query.all()
+    role_map = ensure_core_roles()
+    roles = [role_map['admin'], role_map['staff'], role_map['teacher'], role_map['student']]
     return jsonify({'code': 200, 'data': [{'id': r.id, 'role_name': r.role_name, 'description': r.description} for r in roles]})
+
+
+@admin_bp.route('/api/users/create', methods=['POST'])
+@roles_required('admin', 'staff')
+def create_teacher_user():
+    data = request.get_json()
+    username = (data.get('username') or '').strip()
+    password = (data.get('password') or '').strip()
+    real_name = (data.get('real_name') or '').strip()
+    department = (data.get('department') or '教学部').strip() or '教学部'
+    phone = (data.get('phone') or '').strip() or None
+    role_name = (data.get('role_name') or 'teacher').strip()
+
+    if role_name != 'teacher':
+        return jsonify({'code': 400, 'msg': '当前仅支持新增教师账号'})
+    if not username or not password or not real_name:
+        return jsonify({'code': 400, 'msg': '账号、密码、姓名为必填项'})
+    if len(password) < 6:
+        return jsonify({'code': 400, 'msg': '密码长度不能少于6位'})
+    if User.query.filter_by(username=username).first():
+        return jsonify({'code': 400, 'msg': '该账号已存在'})
+
+    role_map = ensure_core_roles()
+    teacher_role = role_map['teacher']
+
+    user = User(
+        username=username,
+        password_hash=generate_password_hash(password),
+        real_name=real_name,
+        department=department,
+        phone=phone,
+        status='approved',
+        role_id=teacher_role.id
+    )
+    db.session.add(user)
+
+    r_level, r_msg = check_operation_risk()
+    create_log = SysLog(
+        user_id=session.get('user_id'),
+        action='新增教师账号',
+        target=f'账号: {username}, 姓名: {real_name}',
+        ip_address=get_real_ip(),
+        risk_level=r_level,
+        risk_msg=r_msg
+    )
+    db.session.add(create_log)
+    db.session.commit()
+    return jsonify({'code': 200, 'msg': '教师账号创建成功'})
 
 
 # ================= 审计日志 =================
