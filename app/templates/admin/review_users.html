@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>用户与权限管理 - 设备借还管理系统</title>
+    <title>用户与权限管理 - 摄影机构管理系统</title>
     <style>
         :root {
             --primary-color: #059669;
@@ -231,7 +231,7 @@
 
 <div class="container">
     <div class="header">
-        <h2>📥 待审核入网申请</h2>
+        <h2>📥 待审核注册申请</h2>
         <div class="nav-links">
             <a href="/dashboard">返回工作台</a>
             <a href="#" onclick="logout()">安全退出</a>
@@ -250,20 +250,23 @@
         </thead>
         <tbody id="pendingTableBody"></tbody>
     </table>
-    <div id="pendingEmptyState" class="empty-state">目前没有需要审核的入网申请 🎉</div>
+    <div id="pendingEmptyState" class="empty-state">目前没有需要审核的注册申请 🎉</div>
 </div>
 
 <div class="container">
     <div class="header">
-        <h2>👥 全院系统用户管理</h2>
-        <button class="btn btn-approve" onclick="fetchAllUsers()">刷新列表</button>
+        <h2>👥 系统用户管理</h2>
+        <div class="btn-group">
+            <button class="btn btn-approve" onclick="openCreateTeacherModal()">+ 新增教师</button>
+            <button class="btn btn-approve" onclick="fetchAllUsers()">刷新列表</button>
+        </div>
     </div>
     <table>
         <thead>
         <tr>
-            <th>工号</th>
+            <th>账号</th>
             <th>真实姓名</th>
-            <th>科室</th>
+            <th>部门</th>
             <th>系统角色</th>
             <th>安全状态</th>
             <th>操作</th>
@@ -283,11 +286,7 @@
         </div>
         <div class="form-group">
             <label>分配角色权限：</label>
-            <select id="editRole">
-                <option value="1">系统超级管理员 (Admin)</option>
-                <option value="2">普通医护人员 (User)</option>
-                <option value="3">设备管理人员 (Equipment Manager)</option>
-            </select>
+            <select id="editRole"></select>
         </div>
         <div class="form-group">
             <label>重置密码 (留空则不修改)：</label>
@@ -300,11 +299,45 @@
     </div>
 </div>
 
+<div class="modal-overlay" id="createTeacherModal">
+    <div class="modal">
+        <h3>新增教师账号</h3>
+        <div id="createTeacherMsg" class="msg-tip" style="display:none;"></div>
+        <div class="form-group">
+            <label>账号 *</label>
+            <input type="text" id="newTeacherUsername" placeholder="登录账号">
+        </div>
+        <div class="form-group">
+            <label>姓名 *</label>
+            <input type="text" id="newTeacherRealName" placeholder="教师姓名">
+        </div>
+        <div class="form-group">
+            <label>部门</label>
+            <input type="text" id="newTeacherDepartment" value="教学部">
+        </div>
+        <div class="form-group">
+            <label>手机号</label>
+            <input type="text" id="newTeacherPhone" placeholder="选填">
+        </div>
+        <div class="form-group">
+            <label>初始密码 *</label>
+            <input type="password" id="newTeacherPassword" placeholder="至少6位">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-cancel" onclick="closeCreateTeacherModal()">取消</button>
+            <button class="btn btn-approve" onclick="submitCreateTeacher()">确认创建</button>
+        </div>
+    </div>
+</div>
+
 <script>
     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const currentRoleName = '{{ role_name }}';
+    let roleList = [];
 
     // 页面加载完毕后拉取所有数据
     document.addEventListener('DOMContentLoaded', () => {
+        loadRoles();
         fetchPendingUsers();
         fetchAllUsers();
     });
@@ -370,9 +403,25 @@
     // ================= 2. 全院用户管理逻辑 =================
     const roleDict = {
         'admin': '超级管理员',
-        'equipment_manager': '设备管理员',
-        'user': '普通医护人员'
+        'staff': '教务/前台',
+        'teacher': '教师',
+        'student': '学员',
+        'equipment_manager': '设备管理员(旧)',
+        'user': '普通用户(旧)'
     };
+
+    function loadRoles() {
+        fetch('/admin/api/users/roles')
+            .then(res => res.json())
+            .then(data => {
+                if (data.code !== 200) return;
+                roleList = data.data || [];
+                const sel = document.getElementById('editRole');
+                sel.innerHTML = roleList.map(r =>
+                    `<option value="${r.id}">${roleDict[r.role_name] || r.role_name}</option>`
+                ).join('');
+            });
+    }
 
     function fetchAllUsers() {
         fetch('/admin/api/users/all')
@@ -392,14 +441,14 @@
                     : `<span class="badge badge-safe">安全正常</span>`;
 
             // 构建操作按钮
-            let actionHtml = `<button class="btn btn-edit" onclick="openEditModal(${user.id}, '${user.real_name} - ${user.username}')">编辑</button>`;
+            let actionHtml = `<button class="btn btn-edit" onclick="openEditModal(${user.id}, '${user.real_name} - ${user.username}', ${user.role_id})">编辑</button>`;
 
             if (user.is_locked) {
                 actionHtml += `<button class="btn btn-unlock" onclick="unlockUser(${user.id})">解封账号</button>`;
             }
 
             // 保护机制：系统不展示删除 admin 自身的按钮
-            if (user.username !== 'admin') {
+            if (currentRoleName === 'admin' && user.username !== 'admin') {
                 actionHtml += `<button class="btn btn-delete" onclick="deleteUser(${user.id}, '${user.real_name}')">删除</button>`;
             }
 
@@ -447,9 +496,10 @@
     }
 
     // ================= 3. 编辑模态框逻辑 =================
-    function openEditModal(userId, displayName) {
+    function openEditModal(userId, displayName, roleId) {
         document.getElementById('editUserId').value = userId;
         document.getElementById('editUserName').value = displayName;
+        document.getElementById('editRole').value = String(roleId);
         document.getElementById('editPassword').value = ''; // 清空密码框
         document.getElementById('editModal').style.display = 'flex';
     }
@@ -460,10 +510,10 @@
 
     function submitEdit() {
         const userId = document.getElementById('editUserId').value;
-        const roleId = document.getElementById('editRole').value;
+        const roleId = parseInt(document.getElementById('editRole').value);
         const newPassword = document.getElementById('editPassword').value;
 
-        const payload = {user_id: userId, role_id: parseInt(roleId)};
+        const payload = {user_id: userId, role_id: roleId};
         if (newPassword.trim() !== '') {
             payload.new_password = newPassword.trim();
         }
@@ -478,6 +528,45 @@
                 closeModal();
                 fetchAllUsers();
             } else showToast(data.msg, '#ef4444');
+        });
+    }
+
+    function openCreateTeacherModal() {
+        document.getElementById('createTeacherMsg').style.display = 'none';
+        document.getElementById('newTeacherUsername').value = '';
+        document.getElementById('newTeacherRealName').value = '';
+        document.getElementById('newTeacherDepartment').value = '教学部';
+        document.getElementById('newTeacherPhone').value = '';
+        document.getElementById('newTeacherPassword').value = '';
+        document.getElementById('createTeacherModal').style.display = 'flex';
+    }
+
+    function closeCreateTeacherModal() {
+        document.getElementById('createTeacherModal').style.display = 'none';
+    }
+
+    function submitCreateTeacher() {
+        const payload = {
+            username: document.getElementById('newTeacherUsername').value.trim(),
+            real_name: document.getElementById('newTeacherRealName').value.trim(),
+            department: document.getElementById('newTeacherDepartment').value.trim(),
+            phone: document.getElementById('newTeacherPhone').value.trim(),
+            password: document.getElementById('newTeacherPassword').value,
+            role_name: 'teacher'
+        };
+
+        fetch('/admin/api/users/create', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify(payload)
+        }).then(res => res.json()).then(data => {
+            if (data.code === 200) {
+                showToast(data.msg, '#059669');
+                closeCreateTeacherModal();
+                fetchAllUsers();
+            } else {
+                showToast(data.msg, '#ef4444');
+            }
         });
     }
 

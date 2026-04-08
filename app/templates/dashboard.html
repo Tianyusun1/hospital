@@ -69,9 +69,11 @@
         <div class="menu-title">作品管理</div>
         <a href="/work/">🖼️ 作品管理</a>
 
-        {% if role_name == 'admin' %}
-        <div class="menu-title">系统管理 (管理员专属)</div>
+        {% if role_name in ['admin', 'staff'] %}
+        <div class="menu-title">系统管理</div>
         <a href="/admin/users/review">👥 用户与权限管理</a>
+        {% endif %}
+        {% if role_name == 'admin' %}
         <a href="/admin/audit">📝 系统审计日志</a>
         {% endif %}
     </div>
@@ -129,8 +131,10 @@
                 <a href="/student/" class="quick-link-btn">👤 我的档案</a>
                 <a href="/work/" class="quick-link-btn">🖼️ 我的作品</a>
                 {% endif %}
-                {% if role_name == 'admin' %}
+                {% if role_name in ['admin', 'staff'] %}
                 <a href="/admin/users/review" class="quick-link-btn">👥 用户审核</a>
+                {% endif %}
+                {% if role_name == 'admin' %}
                 <a href="/admin/audit" class="quick-link-btn">📝 系统日志</a>
                 {% endif %}
             </div>

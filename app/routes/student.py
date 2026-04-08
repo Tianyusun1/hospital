@@ -183,17 +183,44 @@ def api_enrollment_list():
 
 
 @student_bp.route('/enrollment/api/add', methods=['POST'])
-@roles_required('admin', 'staff')
+@roles_required('admin', 'staff', 'student')
 def api_enrollment_add():
     data = request.get_json()
+    role = session.get('role_name')
+    uid = session.get('user_id')
+
     student_id = data.get('student_id')
     class_id = data.get('class_id')
+    if role == 'student':
+        stu = Student.query.filter_by(user_id=uid).first()
+        if not stu:
+            return jsonify({'code': 403, 'msg': '未找到您的学员档案，请联系教务'})
+        student_id = stu.id
+
     if not student_id or not class_id:
         return jsonify({'code': 400, 'msg': '学员和班级为必填项'})
+
     if not Student.query.get(student_id):
         return jsonify({'code': 404, 'msg': '学员不存在'})
-    if not TrainingClass.query.get(class_id):
+
+    target_class = TrainingClass.query.get(class_id)
+    if not target_class:
         return jsonify({'code': 404, 'msg': '班级不存在'})
+    if target_class.status != 'open':
+        return jsonify({'code': 400, 'msg': '该班级当前不可报名'})
+
+    duplicate = Enrollment.query.filter_by(student_id=student_id, class_id=class_id).filter(
+        Enrollment.status.in_(['active', 'pending'])
+    ).first()
+    if duplicate:
+        return jsonify({'code': 400, 'msg': '您已报名该班级，无需重复报名'})
+
+    if target_class.capacity:
+        current_count = Enrollment.query.filter_by(class_id=class_id).filter(
+            Enrollment.status.in_(['active', 'pending'])
+        ).count()
+        if current_count >= target_class.capacity:
+            return jsonify({'code': 400, 'msg': '该班级已满员，请选择其他班级'})
 
     service_start = None
     service_end = None
@@ -244,14 +271,23 @@ def api_enrollment_update_status():
 # ================= 缴费 API =================
 
 @student_bp.route('/payment/api/list', methods=['GET'])
-@roles_required('admin', 'staff')
+@roles_required('admin', 'staff', 'student')
 def api_payment_list():
+    role = session.get('role_name')
+    uid = session.get('user_id')
     enrollment_id = request.args.get('enrollment_id')
     query = Payment.query.options(
         joinedload(Payment.recorder)
     )
+    if role == 'student':
+        stu = Student.query.filter_by(user_id=uid).first()
+        if not stu:
+            return jsonify({'code': 200, 'data': []})
+        query = query.join(Enrollment, Payment.enrollment_id == Enrollment.id).filter(
+            Enrollment.student_id == stu.id
+        )
     if enrollment_id:
-        query = query.filter_by(enrollment_id=int(enrollment_id))
+        query = query.filter(Payment.enrollment_id == int(enrollment_id))
     payments = query.order_by(Payment.pay_time.desc()).all()
 
     PAY_TYPE_MAP = {'deposit': '定金', 'final': '尾款', 'refund': '退款'}
@@ -273,9 +309,11 @@ def api_payment_list():
 
 
 @student_bp.route('/payment/api/add', methods=['POST'])
-@roles_required('admin', 'staff')
+@roles_required('admin', 'staff', 'student')
 def api_payment_add():
     data = request.get_json()
+    role = session.get('role_name')
+    uid = session.get('user_id')
     enrollment_id = data.get('enrollment_id')
     amount = data.get('amount')
     pay_type = data.get('pay_type')
@@ -283,8 +321,13 @@ def api_payment_add():
 
     if not all([enrollment_id, amount, pay_type, pay_method]):
         return jsonify({'code': 400, 'msg': '缺少必填字段'})
-    if not Enrollment.query.get(enrollment_id):
+    enrollment = Enrollment.query.get(enrollment_id)
+    if not enrollment:
         return jsonify({'code': 404, 'msg': '报名记录不存在'})
+    if role == 'student':
+        stu = Student.query.filter_by(user_id=uid).first()
+        if not stu or enrollment.student_id != stu.id:
+            return jsonify({'code': 403, 'msg': '无权为其他学员记录缴费'})
 
     pay = Payment(
         enrollment_id=enrollment_id,

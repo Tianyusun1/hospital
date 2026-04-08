@@ -109,11 +109,69 @@
         <!-- 学员自己的视图 -->
         <div id="studentCard" class="student-card"><h3>📋 我的学员档案</h3><p style="color:#64748b">加载中...</p></div>
         <div class="tabs">
-            <div class="tab active" onclick="switchTab('myEnroll')">我的报名</div>
+            <div class="tab active" id="tab-btn-myEnroll" onclick="switchTab('myEnroll')">我的报名</div>
+            <div class="tab" id="tab-btn-selfService" onclick="switchTab('selfService')">自主报名与缴费</div>
         </div>
         <div id="tab-myEnroll" class="tab-content active">
             <table><thead><tr><th>班级</th><th>课程</th><th>状态</th><th>报名时间</th><th>服务期</th></tr></thead>
             <tbody id="myEnrollBody"><tr><td colspan="5" style="text-align:center;color:#94a3b8">加载中...</td></tr></tbody></table>
+        </div>
+        <div id="tab-selfService" class="tab-content">
+            <div class="form-group">
+                <label>可报名班级</label>
+                <select id="student_class_id"></select>
+            </div>
+            <div class="form-row">
+                <div class="form-group"><label>服务开始日期</label><input type="date" id="student_service_start"></div>
+                <div class="form-group"><label>服务结束日期</label><input type="date" id="student_service_end"></div>
+            </div>
+            <div style="display:flex;gap:10px;margin-bottom:18px">
+                <button class="btn btn-primary" onclick="submitStudentEnroll()">提交报名</button>
+                <button class="btn btn-secondary" onclick="loadOpenClasses()">刷新班级</button>
+            </div>
+            <div id="studentEnrollMsg" class="msg-tip" style="display:none;"></div>
+
+            <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0">
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>我的报名记录</label>
+                    <select id="student_enrollment_id"></select>
+                </div>
+                <div class="form-group">
+                    <label>金额 (元)</label>
+                    <input type="number" id="student_pay_amount" step="0.01" placeholder="例如 1000">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>缴费类型</label>
+                    <select id="student_pay_type">
+                        <option value="deposit">定金</option>
+                        <option value="final">尾款/全款</option>
+                        <option value="refund">退款</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>支付方式</label>
+                    <select id="student_pay_method">
+                        <option value="wechat">微信</option>
+                        <option value="alipay">支付宝</option>
+                        <option value="cash">现金</option>
+                        <option value="transfer">银行转账</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group"><label>备注</label><textarea id="student_pay_notes" rows="2"></textarea></div>
+            <div style="display:flex;gap:10px;margin-bottom:18px">
+                <button class="btn btn-primary" onclick="submitStudentPayment()">提交缴费</button>
+                <button class="btn btn-secondary" onclick="loadMyPayments()">查询缴费</button>
+            </div>
+            <div id="studentPayMsg" class="msg-tip" style="display:none;"></div>
+            <table style="margin-top:10px">
+                <thead><tr><th>ID</th><th>报名ID</th><th>金额</th><th>类型</th><th>方式</th><th>时间</th><th>备注</th></tr></thead>
+                <tbody id="myPayBody"><tr><td colspan="7" style="text-align:center;color:#94a3b8">请选择报名记录后查询</td></tr></tbody>
+            </table>
         </div>
         {% else %}
         <!-- 管理员/教务视图 -->
@@ -282,6 +340,7 @@
         if (roleName === 'student') {
             loadMyInfo();
             loadMyEnrollments();
+            loadOpenClasses();
         } else {
             loadStudents();
         }
@@ -290,11 +349,11 @@
     function switchTab(name) {
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        document.getElementById('tab-btn-' + name) && document.getElementById('tab-btn-' + name).classList.add('active');
-        document.querySelectorAll('.tab').forEach(t => { if(t.textContent.includes(name === 'students' ? '学员档案' : name === 'enrollments' ? '报名' : '缴费')) t.classList.add('active'); });
-        document.getElementById('tab-' + name) && document.getElementById('tab-' + name).classList.add('active');
+        document.getElementById('tab-btn-' + name)?.classList.add('active');
+        document.getElementById('tab-' + name)?.classList.add('active');
         if (name === 'enrollments') loadEnrollments();
         if (name === 'payments') { document.getElementById('payBody').innerHTML = '<tr><td colspan="8" style="text-align:center;color:#94a3b8">请输入报名ID查询</td></tr>'; }
+        if (name === 'myEnroll') loadMyEnrollments();
     }
 
     // ---- 学员视图 ----
@@ -330,6 +389,87 @@
                     <td>${escapeHtml(e.enrolled_at)}</td>
                     <td>${escapeHtml(e.service_start)} ~ ${escapeHtml(e.service_end)}</td></tr>`;
             }).join('');
+            renderMyEnrollmentOptions(res.data);
+        });
+    }
+
+    function renderMyEnrollmentOptions(enrollments) {
+        const sel = document.getElementById('student_enrollment_id');
+        if (!sel) return;
+        if (!enrollments || enrollments.length === 0) {
+            sel.innerHTML = '<option value="">暂无可用报名</option>';
+            return;
+        }
+        sel.innerHTML = enrollments.map(e =>
+            `<option value="${e.id}">#${e.id} ${escapeHtml(e.class_no)} / ${escapeHtml(e.course_name)}</option>`
+        ).join('');
+    }
+
+    function loadOpenClasses() {
+        const sel = document.getElementById('student_class_id');
+        if (!sel) return;
+        fetch('/class/api/list').then(r => r.json()).then(res => {
+            if (res.code !== 200 || !res.data || !res.data.length) {
+                sel.innerHTML = '<option value="">暂无可报名班级</option>';
+                return;
+            }
+            sel.innerHTML = res.data.map(c =>
+                `<option value="${c.id}">${escapeHtml(c.class_no)} / ${escapeHtml(c.course_name)} / ${escapeHtml(c.start_date)} - ${escapeHtml(c.end_date)}</option>`
+            ).join('');
+        });
+    }
+
+    function submitStudentEnroll() {
+        const body = {
+            class_id: document.getElementById('student_class_id').value,
+            service_start: document.getElementById('student_service_start').value,
+            service_end: document.getElementById('student_service_end').value
+        };
+        postJSON('/enrollment/api/add', body, res => {
+            if (res.code === 200) {
+                showMsgTip('studentEnrollMsg', '报名成功', 'success');
+                loadMyEnrollments();
+            } else {
+                showMsgTip('studentEnrollMsg', res.msg, 'error');
+            }
+        });
+    }
+
+    function submitStudentPayment() {
+        const body = {
+            enrollment_id: document.getElementById('student_enrollment_id').value,
+            amount: document.getElementById('student_pay_amount').value,
+            pay_type: document.getElementById('student_pay_type').value,
+            pay_method: document.getElementById('student_pay_method').value,
+            notes: document.getElementById('student_pay_notes').value
+        };
+        postJSON('/payment/api/add', body, res => {
+            if (res.code === 200) {
+                showMsgTip('studentPayMsg', '缴费记录已提交', 'success');
+                loadMyPayments();
+            } else {
+                showMsgTip('studentPayMsg', res.msg, 'error');
+            }
+        });
+    }
+
+    function loadMyPayments() {
+        const eid = document.getElementById('student_enrollment_id')?.value;
+        if (!eid) {
+            document.getElementById('myPayBody').innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8">请选择报名记录后查询</td></tr>';
+            return;
+        }
+        fetch('/payment/api/list?enrollment_id=' + eid).then(r => r.json()).then(res => {
+            const body = document.getElementById('myPayBody');
+            if (res.code !== 200 || !res.data || !res.data.length) {
+                body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8">暂无缴费记录</td></tr>';
+                return;
+            }
+            body.innerHTML = res.data.map(p => `
+                <tr><td>#${p.id}</td><td>#${p.enrollment_id}</td><td>¥${p.amount.toFixed(2)}</td>
+                    <td>${escapeHtml(p.pay_type_label)}</td><td>${escapeHtml(p.pay_method_label)}</td>
+                    <td>${escapeHtml(p.pay_time)}</td><td>${escapeHtml(p.notes) || '-'}</td></tr>
+            `).join('');
         });
     }
 
