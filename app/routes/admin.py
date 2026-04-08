@@ -10,6 +10,7 @@ from app.utils.security import check_operation_risk
 from sqlalchemy.orm import joinedload
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
+DEFAULT_TEACHER_DEPARTMENT = '教学部'
 
 
 def get_real_ip():
@@ -192,7 +193,7 @@ def create_teacher_user():
     username = (data.get('username') or '').strip()
     password = (data.get('password') or '').strip()
     real_name = (data.get('real_name') or '').strip()
-    department = (data.get('department') or '教学部').strip() or '教学部'
+    department = (data.get('department') or DEFAULT_TEACHER_DEPARTMENT).strip() or DEFAULT_TEACHER_DEPARTMENT
     phone = (data.get('phone') or '').strip() or None
     role_name = (data.get('role_name') or 'teacher').strip()
 

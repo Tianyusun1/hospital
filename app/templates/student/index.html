@@ -350,7 +350,7 @@
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         document.getElementById('tab-btn-' + name)?.classList.add('active');
-        document.getElementById('tab-' + name) && document.getElementById('tab-' + name).classList.add('active');
+        document.getElementById('tab-' + name)?.classList.add('active');
         if (name === 'enrollments') loadEnrollments();
         if (name === 'payments') { document.getElementById('payBody').innerHTML = '<tr><td colspan="8" style="text-align:center;color:#94a3b8">请输入报名ID查询</td></tr>'; }
         if (name === 'myEnroll') loadMyEnrollments();
