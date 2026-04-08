@@ -2,6 +2,7 @@ from flask import Flask
 from config import Config
 from app.extensions import db
 from flask_wtf.csrf import CSRFProtect
+import os
 
 csrf = CSRFProtect()
 
@@ -11,6 +12,11 @@ def create_app():
     app.config.from_object(Config)
     db.init_app(app)
     csrf.init_app(app)
+
+    # 确保文件上传目录存在
+    upload_folder = app.config.get('UPLOAD_FOLDER')
+    if upload_folder:
+        os.makedirs(upload_folder, exist_ok=True)
 
     from app.routes.auth import auth_bp
     app.register_blueprint(auth_bp)

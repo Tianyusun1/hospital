@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session, render_template
+from flask import Blueprint, request, jsonify, session, render_template, current_app, send_from_directory
 from app.extensions import db
 from app.models.log import SysLog
 from app.models.photography import Student, Work, WorkReview, Enrollment, TrainingClass
@@ -6,6 +6,9 @@ from app.utils.decorators import roles_required
 from app.utils.security import check_operation_risk
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta
+from werkzeug.utils import secure_filename
+import os
+import uuid
 
 work_bp = Blueprint('work', __name__)
 
@@ -26,6 +29,40 @@ def _write_log(action, target):
     ))
 
 
+def _allowed_file(filename):
+    """校验文件扩展名是否在允许列表中（不区分大小写）"""
+    allowed = current_app.config.get('ALLOWED_EXTENSIONS', {'jpg', 'jpeg', 'png', 'webp'})
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed
+
+
+def _save_upload(file):
+    """保存上传文件，返回相对 static 目录的路径字符串，或在校验失败时抛出 ValueError"""
+    if not file or not file.filename:
+        raise ValueError('未选择文件')
+
+    if not _allowed_file(file.filename):
+        raise ValueError('不支持的文件格式，仅允许 jpg / jpeg / png / webp')
+
+    # 通过 seek 获取文件大小，避免将全部内容读入内存
+    file.seek(0, 2)
+    file_size = file.tell()
+    file.seek(0)
+    max_size = current_app.config.get('MAX_UPLOAD_SIZE', 5 * 1024 * 1024)
+    if file_size > max_size:
+        raise ValueError(f'文件大小超过限制（最大 {max_size // (1024 * 1024)} MB）')
+
+    safe_name = secure_filename(file.filename)
+    # 加 8 位随机前缀避免重名
+    unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
+
+    upload_dir = current_app.config.get('UPLOAD_FOLDER')
+    os.makedirs(upload_dir, exist_ok=True)
+    file.save(os.path.join(upload_dir, unique_name))
+
+    # 返回相对 static 目录的路径，如 uploads/abc12345_photo.jpg
+    return f"uploads/{unique_name}"
+
+
 # ================= 页面路由 =================
 
 @work_bp.route('/work/')
@@ -34,6 +71,14 @@ def work_page():
     return render_template('work/index.html',
                            role_name=session.get('role_name'),
                            real_name=session.get('real_name'))
+
+
+# 提供已上传文件的访问（带登录保护）
+@work_bp.route('/work/uploads/<path:filename>')
+@roles_required('admin', 'staff', 'teacher', 'student')
+def serve_upload(filename):
+    upload_dir = current_app.config.get('UPLOAD_FOLDER')
+    return send_from_directory(upload_dir, filename)
 
 
 # ================= 作品 API =================
@@ -85,6 +130,17 @@ def api_work_list():
             deadline_str = deadline_bj.strftime('%Y-%m-%d %H:%M')
             is_overdue = now_utc > w.deadline
 
+        # 优先使用本地上传路径，其次使用外部 URL
+        # file_path 格式固定为 "uploads/<filename>"，统一构造访问 URL
+        file_url = ''
+        file_path = ''
+        if w.file_path:
+            file_path = w.file_path
+            filename = w.file_path[len('uploads/'):] if w.file_path.startswith('uploads/') else w.file_path
+            file_url = f"/work/uploads/{filename}"
+        elif w.file_url:
+            file_url = w.file_url
+
         data.append({
             'id': w.id,
             'student_id': w.student_id,
@@ -92,7 +148,8 @@ def api_work_list():
             'enrollment_id': w.enrollment_id,
             'title': w.title,
             'description': w.description or '',
-            'file_url': w.file_url or '',
+            'file_url': file_url,
+            'file_path': file_path,
             'submitted_at': (w.submitted_at + timedelta(hours=8)).strftime('%Y-%m-%d %H:%M') if w.submitted_at else '',
             'deadline': deadline_str,
             'is_overdue': is_overdue,
@@ -111,27 +168,54 @@ def api_work_submit():
     if not stu:
         return jsonify({'code': 403, 'msg': '未找到学员档案'})
 
-    data = request.get_json()
-    title = data.get('title', '').strip()
+    # 支持 multipart/form-data（含文件上传）和 application/json 两种提交方式
+    is_multipart = request.content_type and 'multipart' in request.content_type
+
+    if is_multipart:
+        title = request.form.get('title', '').strip()
+        description = request.form.get('description', '').strip()
+        deadline_str = request.form.get('deadline', '')
+        enrollment_id = request.form.get('enrollment_id') or None
+        upload_file = request.files.get('work_file')
+    else:
+        data = request.get_json() or {}
+        title = data.get('title', '').strip()
+        description = data.get('description', '').strip()
+        deadline_str = data.get('deadline', '')
+        enrollment_id = data.get('enrollment_id') or None
+        upload_file = None
+
     if not title:
         return jsonify({'code': 400, 'msg': '作品标题为必填项'})
 
-    deadline = None
-    if data.get('deadline'):
+    # 处理文件上传
+    saved_path = None
+    if upload_file and upload_file.filename:
         try:
-            deadline = datetime.strptime(data['deadline'], '%Y-%m-%d %H:%M')
-        except ValueError:
+            saved_path = _save_upload(upload_file)
+        except ValueError as upload_err:
+            # 只返回我们自己抛出的受控错误消息，不泄露内部细节
+            err_msg = upload_err.args[0] if upload_err.args else '文件上传失败'
+            return jsonify({'code': 400, 'msg': err_msg})
+
+    # 解析截止日期
+    deadline = None
+    if deadline_str:
+        for fmt in ('%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M', '%Y-%m-%d'):
             try:
-                deadline = datetime.strptime(data['deadline'], '%Y-%m-%d')
+                deadline = datetime.strptime(deadline_str, fmt)
+                break
             except ValueError:
-                return jsonify({'code': 400, 'msg': '截止日期格式不正确，请使用 YYYY-MM-DD HH:MM 格式'})
+                continue
+        if deadline is None:
+            return jsonify({'code': 400, 'msg': '截止日期格式不正确，请使用 YYYY-MM-DD 格式'})
 
     work = Work(
         student_id=stu.id,
-        enrollment_id=data.get('enrollment_id') or None,
+        enrollment_id=enrollment_id,
         title=title,
-        description=data.get('description', '').strip() or None,
-        file_url=data.get('file_url', '').strip() or None,
+        description=description or None,
+        file_path=saved_path,
         deadline=deadline,
         status='submitted'
     )
