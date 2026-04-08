@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from app.utils.security import check_operation_risk
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
+from sqlalchemy import or_
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -26,13 +27,15 @@ def _ensure_student_profile_for_user(user_id, creator_id=None):
     if not user:
         return None
 
-    candidate_phone = (user.phone or f'auto-{user.id}')[:20]
-    existing_phone = Student.query.filter(
+    raw_phone = (user.phone or '').strip()
+    candidate_phone = (raw_phone or f'auto-{user.id}')[:20]
+    suffix = 0
+    while Student.query.filter(
         Student.phone == candidate_phone,
-        Student.user_id != user.id
-    ).first()
-    if existing_phone:
-        candidate_phone = f'auto-{user.id}'
+        or_(Student.user_id.is_(None), Student.user_id != user.id)
+    ).first():
+        suffix += 1
+        candidate_phone = f'auto-{user.id}-{suffix}'[:20]
 
     stu = Student(
         name=(user.real_name or user.username or '学员').strip(),

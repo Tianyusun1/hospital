@@ -109,10 +109,14 @@ def api_course_update():
 @course_bp.route('/class/api/list', methods=['GET'])
 @roles_required('admin', 'staff', 'teacher', 'student')
 def api_class_list():
-    classes = TrainingClass.query.options(
+    role = session.get('role_name')
+    query = TrainingClass.query.options(
         joinedload(TrainingClass.course),
         joinedload(TrainingClass.teacher)
-    ).order_by(TrainingClass.created_at.desc()).all()
+    )
+    if role == 'student':
+        query = query.filter(TrainingClass.status == 'open')
+    classes = query.order_by(TrainingClass.created_at.desc()).all()
     data = [{
         'id': tc.id,
         'class_no': tc.class_no,
