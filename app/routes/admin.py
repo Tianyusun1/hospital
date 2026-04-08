@@ -2,12 +2,13 @@ from flask import Blueprint, request, jsonify, render_template, session
 from app.extensions import db
 from app.models.user import User, Role
 from app.models.log import SysLog
-from app.models.photography import Enrollment, Payment, WorkReview
+from app.models.photography import Student, Course, TrainingClass, Enrollment, Payment, Work, WorkReview
 from app.utils.decorators import admin_required
 from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta
 from app.utils.security import check_operation_risk
 from sqlalchemy.orm import joinedload
+from sqlalchemy import func
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -242,3 +243,62 @@ def get_log_alerts():
         'warning_total': warning_count,
         'danger_total': danger_count
     })
+
+
+# ================= 数据统计 =================
+
+@admin_bp.route('/statistics', methods=['GET'])
+@admin_required
+def statistics_page():
+    return render_template('admin/statistics.html',
+                           real_name=session.get('real_name'))
+
+
+@admin_bp.route('/api/statistics', methods=['GET'])
+@admin_required
+def get_statistics():
+    total_students = Student.query.count()
+    active_enrollments = Enrollment.query.filter_by(status='active').count()
+    pending_works = Work.query.filter_by(status='submitted').count()
+
+    one_day_ago = datetime.utcnow() - timedelta(days=1)
+    risk_24h = SysLog.query.filter(SysLog.risk_level > 0, SysLog.created_at >= one_day_ago).count()
+
+    # 各课程在读报名人数
+    course_stats = db.session.query(
+        Course.name,
+        func.count(Enrollment.id).label('count')
+    ).join(TrainingClass, TrainingClass.course_id == Course.id
+    ).join(Enrollment, Enrollment.class_id == TrainingClass.id
+    ).filter(Enrollment.status == 'active'
+    ).group_by(Course.id, Course.name
+    ).order_by(func.count(Enrollment.id).desc()).all()
+
+    # 缴费类型分布
+    payment_stats = db.session.query(
+        Payment.pay_type,
+        func.count(Payment.id).label('count'),
+        func.sum(Payment.amount).label('total')
+    ).group_by(Payment.pay_type).all()
+
+    # 最近10条报名
+    recent = Enrollment.query.options(
+        joinedload(Enrollment.student),
+        joinedload(Enrollment.training_class).joinedload(TrainingClass.course)
+    ).order_by(Enrollment.enrolled_at.desc()).limit(10).all()
+
+    return jsonify({'code': 200, 'data': {
+        'total_students': total_students,
+        'active_enrollments': active_enrollments,
+        'pending_works': pending_works,
+        'risk_24h': risk_24h,
+        'course_stats': [{'name': r.name, 'count': r.count} for r in course_stats],
+        'payment_stats': [{'pay_type': r.pay_type, 'count': r.count, 'total': float(r.total or 0)} for r in payment_stats],
+        'recent_enrollments': [{
+            'student_name': e.student.name if e.student else '',
+            'course_name': e.training_class.course.name if e.training_class and e.training_class.course else '',
+            'class_no': e.training_class.class_no if e.training_class else '',
+            'status': e.status,
+            'enrolled_at': e.enrolled_at.strftime('%Y-%m-%d %H:%M') if e.enrolled_at else ''
+        } for e in recent]
+    }})
