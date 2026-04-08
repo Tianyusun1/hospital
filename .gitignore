@@ -13,8 +13,10 @@ venv/
 .idea/
 *.swp
 
-# Uploads
-app/static/uploads/
+# Uploads (keep placeholder, ignore actual uploaded files)
+app/static/uploads/*
+!app/static/uploads/.gitkeep
 
 # Local config overrides
 instance/
+__pycache__/
